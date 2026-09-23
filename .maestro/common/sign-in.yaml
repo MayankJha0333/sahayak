@@ -1,0 +1,27 @@
+# Phone + emulator OTP. Pass PHONE (10 digits). Adds NAME on a first sign-in.
+appId: host.exp.Exponent
+---
+- tapOn: "I need help at home.*"
+- extendedWaitUntil:
+    visible: "Enter your mobile number"
+    timeout: 5000
+- inputText: ${PHONE}
+- tapOn: "Get OTP"
+- extendedWaitUntil:
+    visible: "Emulator OTP: .*"
+    timeout: 10000
+- copyTextFrom: "Emulator OTP: .*"
+- evalScript: ${output.otp = maestro.copiedText.replace(/\D/g, '')}
+- inputText: ${output.otp}
+- extendedWaitUntil:
+    visible: ".*(What should we call you|Get instant).*"
+    timeout: 10000
+- runFlow:
+    when:
+      visible: "What should we call you\\?"
+    commands:
+      - inputText: ${NAME}
+      - tapOn: "Start booking"
+- extendedWaitUntil:
+    visible: ".*Get instant.*"
+    timeout: 10000

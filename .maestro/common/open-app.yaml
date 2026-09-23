@@ -1,0 +1,21 @@
+# Opens Sahayak in Expo Go (Metro on 8081) and signs out if someone is signed in.
+appId: host.exp.Exponent
+---
+# Restart so every flow starts on the first screen, not wherever the last one stopped.
+- stopApp
+- openLink: "exp://127.0.0.1:8081"
+- extendedWaitUntil:
+    visible: ".*(I need help at home|Get instant|Profile|Bookings).*"
+    timeout: 45000
+- runFlow:
+    when:
+      notVisible: "I need help at home.*"
+    commands:
+      - tapOn: ".*Account"
+      - scrollUntilVisible:
+          element: "Sign out"
+          centerElement: true
+      - tapOn: "Sign out"
+      - extendedWaitUntil:
+          visible: "I need help at home.*"
+          timeout: 8000

@@ -1,0 +1,30 @@
+appId: host.exp.Exponent
+name: Customer · account, help message, legal, sign out
+tags: [customer]
+env:
+  PHONE: "9800000002"
+  NAME: "Maestro Tester"
+---
+- runFlow: ../common/open-app.yaml
+- runFlow:
+    file: ../common/sign-in.yaml
+- tapOn: ".*Account"
+- tapOn: ".*Help & support"
+- tapOn: "Request"
+- tapOn: "Your message.*"
+- inputText: "Please add window cleaning"
+- tapOn: ".*Send"
+- extendedWaitUntil:
+    visible: "Sent — thank you"
+    timeout: 6000
+- tapOn: "Go back"
+- tapOn: ".*Terms of service.*"
+- assertVisible: "Cancellation"
+- tapOn: "Go back"
+- scrollUntilVisible:
+    element: "Sign out"
+    centerElement: true
+- tapOn: "Sign out"
+- extendedWaitUntil:
+    visible: "I need help at home.*"
+    timeout: 8000

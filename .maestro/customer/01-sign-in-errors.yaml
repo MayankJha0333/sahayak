@@ -1,0 +1,22 @@
+appId: host.exp.Exponent
+name: Customer · sign-in validation and wrong OTP
+tags: [customer, auth]
+---
+- runFlow: ../common/open-app.yaml
+- tapOn: "I need help at home.*"
+- inputText: "12345"
+- assertVisible: "5 more digits"
+- inputText: "67890"
+- assertVisible: "Indian mobile numbers start with 6, 7, 8 or 9."
+- eraseText: 12
+- inputText: "9800000001"
+- tapOn: "Get OTP"
+- extendedWaitUntil:
+    visible: "Enter the OTP"
+    timeout: 8000
+- inputText: "000000"
+- extendedWaitUntil:
+    visible: "That OTP is not right.*"
+    timeout: 8000
+- tapOn: "Change"
+- assertVisible: "Enter your mobile number"

@@ -1,0 +1,25 @@
+# On the customer home: load demo experts and save an address if this account has none.
+appId: host.exp.Exponent
+---
+- runFlow:
+    when:
+      visible: "Load demo experts"
+    commands:
+      - tapOn: "Load demo experts"
+      - extendedWaitUntil:
+          notVisible: "Load demo experts"
+          timeout: 10000
+- runFlow:
+    when:
+      visible: "Add address.*"
+    commands:
+      - tapOn: "Add address.*"
+      - extendedWaitUntil:
+          visible: "Where should she come\\?"
+          timeout: 5000
+      - tapOn: "Flat or house number"
+      - inputText: "T-1, Flat 101"
+      - tapOn: "Save and use this address"
+      - extendedWaitUntil:
+          visible: ".*Get instant.*"
+          timeout: 8000
