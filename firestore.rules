@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
+    function isAdmin() { return signedIn() && exists(/databases/$(db)/documents/admins/$(request.auth.uid)); }
+
+    // Profile: you read and write your own. Wallet balance is server-owned.
+    match /users/{uid} {
+      allow read: if isMe(uid) || isAdmin();
+      allow create: if isMe(uid)
+        && request.resource.data.role in ['customer', 'partner']
+        && request.resource.data.rewards == 0;
+      allow update: if (isMe(uid)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewards', 'role', 'referredBy', 'firstBookingDone']))
+        || isAdmin();
+    }
+
+    // Partners are visible to any signed-in user (customers see name and rating while tracking).
+    // A partner may update her own live fields only.
+    match /partners/{uid} {
+      allow read: if signedIn();
+      allow create: if isMe(uid);
+      allow update: if (isMe(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['at', 'onShift', 'name', 'initials', 'skills', 'hub', 'shift']))
+        || isAdmin();
+    }
+
+    // Bookings are written by Cloud Functions. Parties can read theirs.
+    match /bookings/{id} {
+      allow read: if isAdmin()
+        || (signedIn() && (resource.data.customerId == request.auth.uid || resource.data.partnerId == request.auth.uid))
+        // A partner with an open offer sees the job (area, tasks, pay) before she accepts it.
+        || (signedIn() && exists(/databases/$(db)/documents/offers/$(id + '_' + request.auth.uid)));
+      allow write: if false;
+    }
+
+    // An offer is addressed to one partner.
+    match /offers/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.partnerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /shifts/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.partnerId == request.auth.uid;
+    }
+
+    // Written by Cloud Functions when a referred friend completes a first booking.
+    match /referrals/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.referrerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /feedback/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // The expert's payout for each visit. Written only by Cloud Functions.
+    match /earnings/{bookingId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.partnerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /admins/{uid} { allow read: if isMe(uid) || isAdmin(); allow write: if false; }
+    match /config/{doc} { allow read: if signedIn(); allow write: if false; }
+  }
+}
