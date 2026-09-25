@@ -1,0 +1,33 @@
+appId: host.exp.Exponent
+name: Customer · new user, address on the map, book now, track, rate
+tags: [customer, booking, smoke]
+env:
+  PHONE: "9800000002"
+  NAME: "Maestro Tester"
+---
+- runFlow: ../common/open-app.yaml
+- runFlow:
+    file: ../common/sign-in.yaml
+- runFlow: ../common/ensure-setup.yaml
+- tapOn: "Get instant.*"
+- extendedWaitUntil:
+    visible: "Review — expert in.*"
+    timeout: 8000
+- tapOn: "Review — expert in.*"
+- assertVisible: "FIRST50 applied"
+- tapOn: "Pay .* with Razorpay"
+- runFlow: ../common/pay.yaml
+- extendedWaitUntil:
+    visible: "Arriving in.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "She is at your gate"
+    timeout: 90000
+- tapOn: "She has started — I shared the code"
+- extendedWaitUntil:
+    visible: "How did it go\\?"
+    timeout: 150000
+- tapOn: "Submit"
+- extendedWaitUntil:
+    visible: ".*Get instant.*"
+    timeout: 10000

@@ -1,0 +1,34 @@
+appId: host.exp.Exponent
+name: Customer · schedule tomorrow, see it on home, cancel free
+tags: [customer, booking]
+env:
+  PHONE: "9800000002"
+  NAME: "Maestro Tester"
+---
+- runFlow: ../common/open-app.yaml
+- runFlow:
+    file: ../common/sign-in.yaml
+- runFlow: ../common/ensure-setup.yaml
+- tapOn: "Schedule.*"
+- extendedWaitUntil:
+    visible: "Review booking"
+    timeout: 5000
+- tapOn: "Tomorrow"
+- tapOn: ".*Evening"
+- tapOn: "5:00.PM"
+- tapOn: "Review booking"
+- assertVisible: "Free to cancel until 2 hours before the slot.*"
+- tapOn: "Pay .* with Razorpay"
+- runFlow: ../common/pay.yaml
+- extendedWaitUntil:
+    visible: "Scheduled visit"
+    timeout: 15000
+- tapOn: "Go back"
+- assertVisible: "SCHEDULED.*"
+- tapOn: "SCHEDULED.*"
+- tapOn: "Cancel · full .* refunded"
+- tapOn: "Cancel visit"
+- extendedWaitUntil:
+    visible: "Visit cancelled"
+    timeout: 8000
+- tapOn: "OK"

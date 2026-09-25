@@ -1,0 +1,21 @@
+# Pays whatever checkout is open. Without Razorpay keys the app shows its own test sheet;
+# with test keys it opens real Razorpay (test mode) and we pay by demo net banking → Success.
+appId: host.exp.Exponent
+---
+- extendedWaitUntil:
+    visible: "(Test payment|Bank of Baroda.*)"
+    timeout: 25000
+- runFlow:
+    when:
+      visible: "Test payment"
+    commands:
+      - tapOn: ".*Pay ₹.* \\(test\\)"
+- runFlow:
+    when:
+      visible: "Bank of Baroda.*"
+    commands:
+      - tapOn: "Bank of Baroda.*"
+      - extendedWaitUntil:
+          visible: "Success"
+          timeout: 20000
+      - tapOn: "Success"
