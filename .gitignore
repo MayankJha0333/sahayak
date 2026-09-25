@@ -30,8 +30,6 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
 
 # typescript
 *.tsbuildinfo
@@ -45,14 +43,34 @@ example
 # firebase
 functions/node_modules
 functions/lib
-functions/.env
 .firebase/
-firebase-debug.log
+# emulator logs (firebase-debug, firestore-debug, ui-debug, database-debug, pubsub-debug …)
+*-debug.log
+*-debug.*.log
+# emulator data exports
+emulator-data/
+.emulator-data/
+# Firebase secrets / admin keys — never commit
+.runtimeconfig.json
+.secret.local
+*.secret.local
+*firebase-adminsdk*.json
+service-account*.json
+serviceAccount*.json
+credentials.json
 
 # Firebase native config (contains project ids; keep out of public repos)
 google-services.json
 GoogleService-Info.plist
 
-# local secrets
+# local secrets — every .env file (app and functions), except the committed examples
 .env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+# Razorpay key downloads from the dashboard
+rzp-key*.csv
+*razorpay*key*.csv
 _to_delete/

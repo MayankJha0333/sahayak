@@ -1,3 +1,9 @@
 node_modules
 lib
+# secrets: .env, .env.<project>, .env.local, .secret.local — keep only the example
 .env
+.env.*
+!.env.example
+.secret.local
+.runtimeconfig.json
+*-debug.log
