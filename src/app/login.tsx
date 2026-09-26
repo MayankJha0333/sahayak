@@ -5,22 +5,23 @@ import {
   Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, ChevronLeft, Lock, ShieldCheck, Timer } from '@/components/icons';
+import { Check, ChevronLeft, Gift, Lock, ShieldCheck, Timer, X } from '@/components/icons';
 import { BrandPanel } from '@/components/BrandPanel';
 import { RecaptchaGate, type PhoneVerifier } from '@/components/RecaptchaGate';
 import { Btn, Note, Tiny } from '@/components/ui';
+import { applyReferral, checkReferralCode } from '@/lib/api';
 import { useAuth, type PhoneConfirmation } from '@/lib/auth';
 import { useNativeSdk } from '@/lib/fb/runtime';
 import { USE_EMULATORS } from '@/lib/firebase';
 import { clearReferral, pendingReferral } from '@/lib/referral';
 import { useTheme } from '@/theme';
 
-type Step = 'phone' | 'otp' | 'name';
+type Step = 'phone' | 'otp' | 'name' | 'referral';
 
 const RESEND_SECONDS = 30;
 const OTP_LENGTH = 6;
 
-/** Sign in for customers and partners: mobile number → SMS OTP → (first time) name. */
+/** Sign in for customers and partners: mobile number → SMS OTP → (first time) name → (customers) "did a friend invite you?". */
 export default function Login() {
   const { role: roleParam } = useLocalSearchParams<{ role?: string }>();
   const role = roleParam === 'partner' ? 'partner' : 'customer';
@@ -34,7 +35,9 @@ export default function Login() {
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
   const [ref, setRef] = useState('');
-  const [showRef, setShowRef] = useState(false);
+  // Referral step: whose code it is once checked, and whether it has been applied.
+  const [refFrom, setRefFrom] = useState<{ name: string; reward: number; signup: number } | null>(null);
+  const [refApplied, setRefApplied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [resendLeft, setResendLeft] = useState(0);
@@ -98,8 +101,9 @@ export default function Login() {
     try {
       if (await profileExists()) { await ensureProfile(role); router.replace(dest); }
       else {
+        // Opened from a friend's invite link: the code is ready on the next step.
         const code = await pendingReferral();
-        if (code) { setRef(code); setShowRef(true); }
+        if (code) setRef(code);
         setStep('name'); setBusy(false);
       }
     } catch (e) {
@@ -129,10 +133,31 @@ export default function Login() {
   };
 
   const start = () => run(async () => {
-    await ensureProfile(role, { name: name.trim(), phone: digits ? e164 : undefined, referralCode: ref.trim() || undefined });
-    await clearReferral();
-    router.replace(dest);
+    await ensureProfile(role, { name: name.trim(), phone: digits ? e164 : undefined });
+    // Customers get one more (skippable) question. Experts do not refer, so they go straight in.
+    if (role === 'customer') {
+      setStep('referral');
+      if (ref.trim().length >= 4) void checkCode(ref);
+    } else { await clearReferral(); router.replace(dest); }
   });
+
+  // Look up whose code it is as soon as it is complete, so she sees "Riya invited you" before applying.
+  const checkCode = async (raw: string) => {
+    setRefFrom(null);
+    try { const r = await checkReferralCode({ code: raw.trim() }); setRefFrom({ name: r.referrerName, reward: r.reward, signup: r.signupReward }); setErr(''); }
+    catch (e) { setErr((e as Error).message); }
+  };
+  const onRefChange = (t: string) => {
+    const clean = t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    setRef(clean); setRefFrom(null); setErr('');
+    if (clean.length === 6) void checkCode(clean);
+  };
+  const applyCode = () => run(async () => {
+    await applyReferral({ code: ref.trim() });
+    await clearReferral();
+    setRefApplied(true);
+  });
+  const finish = async () => { await clearReferral(); router.replace(dest); };
 
   const changeNumber = () => { setStep('phone'); setOtp(''); setErr(''); setConfirmation(null); handled.current = false; };
 
@@ -181,12 +206,13 @@ export default function Login() {
           {/* Sheet */}
           <View className="-mt-6 flex-1 rounded-t-[32px] bg-ground px-5 pt-7 dark:bg-ground-dark" style={{ paddingBottom: 16 }}>
             <View className="mb-6 flex-row items-center gap-1.5">
-              {(['phone', 'otp', 'name'] as Step[]).map((s, i) => {
-                const idx = ['phone', 'otp', 'name'].indexOf(step);
+              {/* Two dots for number + OTP; then the first-time steps (name, and for customers the optional code). */}
+              {((step === 'phone' || step === 'otp') ? ['phone', 'otp'] : role === 'customer' ? ['name', 'referral'] : ['name'] as Step[]).map((s, i, all) => {
+                const idx = all.indexOf(step);
                 return <View key={s} className={`h-1.5 rounded-full ${i <= idx ? 'w-7 bg-brand' : 'w-3 bg-line dark:bg-line-dark'}`} />;
               })}
               <Text className="ml-2 font-jkm text-[11px] text-ink3 dark:text-ink3-dark">
-                {step === 'phone' ? 'Step 1 of 2' : step === 'otp' ? 'Step 2 of 2' : 'One last thing'}
+                {step === 'phone' ? 'Step 1 of 2' : step === 'otp' ? 'Step 2 of 2' : step === 'name' ? 'Almost done' : 'Last step · optional'}
               </Text>
             </View>
 
@@ -197,11 +223,10 @@ export default function Login() {
                 pretty={pretty} otp={otp} onChange={onOtpChange} inputRef={otpInput} busy={busy} err={err}
                 resendLeft={resendLeft} onResend={sendOtp} onChangeNumber={changeNumber} onSubmit={() => verify()} c={c}
               />
+            ) : step === 'name' ? (
+              <NameStep role={role} name={name} onName={setName} busy={busy} err={err} onSubmit={start} c={c} />
             ) : (
-              <NameStep
-                role={role} name={name} onName={setName} refCode={ref} onRef={setRef} showRef={showRef} onShowRef={() => setShowRef(true)}
-                busy={busy} err={err} onSubmit={start} c={c}
-              />
+              <ReferralStep code={ref} onCode={onRefChange} from={refFrom} applied={refApplied} err={err} onSubmit={applyCode} c={c} />
             )}
           </View>
         </ScrollView>
@@ -211,8 +236,15 @@ export default function Login() {
             <Btn title="Get OTP" busy={busy} disabled={!phoneOk} onPress={sendOtp} />
           ) : step === 'otp' ? (
             <Btn title={busy ? 'Verifying' : 'Verify & continue'} busy={busy} disabled={otp.length < OTP_LENGTH} onPress={() => verify()} />
+          ) : step === 'name' ? (
+            <Btn title="Continue" busy={busy} disabled={name.trim().length < 2} onPress={start} />
+          ) : refApplied ? (
+            <Btn title="Start booking" onPress={finish} />
           ) : (
-            <Btn title={role === 'partner' ? 'Continue' : 'Start booking'} busy={busy} disabled={name.trim().length < 2} onPress={start} />
+            <View className="gap-2">
+              <Btn title="Apply code" busy={busy} disabled={ref.trim().length < 4} onPress={applyCode} />
+              <Btn title="Skip for now" tone="ghost" disabled={busy} onPress={finish} />
+            </View>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -360,11 +392,10 @@ function OtpStep({ pretty, otp, onChange, inputRef, busy, err, resendLeft, onRes
   );
 }
 
-function NameStep({ role, name, onName, refCode, onRef, showRef, onShowRef, busy, err, onSubmit, c }: {
-  role: 'customer' | 'partner'; name: string; onName: (t: string) => void; refCode: string; onRef: (t: string) => void;
-  showRef: boolean; onShowRef: () => void; busy: boolean; err: string; onSubmit: () => void; c: Colours;
+function NameStep({ role, name, onName, err, onSubmit, c }: {
+  role: 'customer' | 'partner'; name: string; onName: (t: string) => void; busy: boolean; err: string; onSubmit: () => void; c: Colours;
 }) {
-  const [focus, setFocus] = useState<'name' | 'ref' | null>(null);
+  const [focus, setFocus] = useState<'name' | null>(null);
   const ok = name.trim().length >= 2;
   const field = (on: boolean) => `h-[60px] flex-row items-center rounded-[18px] border-[1.5px] bg-paper px-4 dark:bg-paper-dark ${on ? 'border-brand dark:border-brand-dark' : 'border-line dark:border-line-dark'}`;
   return (
@@ -392,19 +423,52 @@ function NameStep({ role, name, onName, refCode, onRef, showRef, onShowRef, busy
         />
       </View>
 
-      {showRef ? (
-        <View className={field(focus === 'ref')}>
-          <TextInput
-            value={refCode} onChangeText={(t) => onRef(t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
-            placeholder="Referral code" placeholderTextColor={c.ink3} autoCapitalize="characters" autoCorrect={false}
-            onFocus={() => setFocus('ref')} onBlur={() => setFocus(null)} accessibilityLabel="Referral code"
-            className="font-jks flex-1 text-[17px] tracking-[2px] text-ink dark:text-ink-dark"
-          />
-          <Text className="font-jkm text-[12px] text-ink3 dark:text-ink3-dark">₹100 on first {role === 'partner' ? 'job' : 'booking'}</Text>
-        </View>
-      ) : null}
 
       {err ? <Note tone="crit">{err}</Note> : null}
+    </View>
+  );
+}
+
+/** Optional last step for customers: a friend's code, filled in already if she came from their invite link. */
+function ReferralStep({ code, onCode, from, applied, err, onSubmit, c }: {
+  code: string; onCode: (t: string) => void; from: { name: string; reward: number; signup: number } | null; applied: boolean; err: string; onSubmit: () => void; c: Colours;
+}) {
+  const [focus, setFocus] = useState(false);
+  if (applied) {
+    return (
+      <View className="items-center gap-3 pt-4">
+        <View className="h-16 w-16 items-center justify-center rounded-full bg-ok-soft dark:bg-ok-softdark"><Check size={30} color={c.ok} /></View>
+        <Text className="font-jkb text-center text-[22px] text-ink dark:text-ink-dark">Code applied</Text>
+        <Text className="font-jk text-center text-[14px] leading-[21px] text-ink2 dark:text-ink2-dark">
+          {from ? (from.signup ? `${from.name} just got ₹${from.signup}, and gets ₹${from.reward - from.signup} more when you finish your first booking.` : `${from.name} gets ₹${from.reward} when you finish your first booking.`) : 'Your friend gets credit when you finish your first booking.'}
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <View className="gap-5">
+      <View className="flex-row items-center gap-3">
+        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft dark:bg-brand-softdark"><Gift size={22} color={c.brand} /></View>
+        <View className="flex-1">
+          <Text className="font-jkb text-[22px] leading-7 tracking-tight text-ink dark:text-ink-dark">Did a friend invite you?</Text>
+          <Text className="font-jk text-[13.5px] text-ink2 dark:text-ink2-dark">Add their code. You can skip this.</Text>
+        </View>
+      </View>
+      <View className={`h-[60px] flex-row items-center rounded-[18px] border-[1.5px] bg-paper px-4 dark:bg-paper-dark ${err ? 'border-crit dark:border-crit-dark' : from ? 'border-ok dark:border-ok-dark' : focus ? 'border-brand dark:border-brand-dark' : 'border-line dark:border-line-dark'}`}>
+        <TextInput
+          value={code} onChangeText={onCode} placeholder="Referral code" placeholderTextColor={c.ink3}
+          autoCapitalize="characters" autoCorrect={false} returnKeyType="done" onSubmitEditing={code.length >= 4 ? onSubmit : undefined}
+          onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} accessibilityLabel="Referral code"
+          className="font-jkx flex-1 text-[18px] tracking-[3px] text-ink dark:text-ink-dark" />
+        {from ? <Check size={18} color={c.ok} /> : code ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Clear code" hitSlop={10} onPress={() => onCode('')}><X size={18} color={c.ink3} /></Pressable>
+        ) : null}
+      </View>
+      {from ? (
+        <Note tone="ok">{from.signup ? `${from.name} invited you. Apply the code: ${from.name} gets ₹${from.signup} now and ₹${from.reward - from.signup} more after your first booking.` : `${from.name} invited you. Apply the code and ${from.name} gets ₹${from.reward} after your first booking.`}</Note>
+      ) : err ? <Note tone="crit">{err}</Note> : (
+        <Tiny>Codes are 6 letters and numbers, like NL7W5B. Your friend finds theirs under Account → Refer & earn.</Tiny>
+      )}
     </View>
   );
 }

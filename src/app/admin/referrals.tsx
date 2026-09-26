@@ -13,18 +13,18 @@ export default function AdminReferrals() {
   const cfg = useReferralConfig();
   const { rows } = useAllReferrals();
   const [active, setActive] = useState(true);
-  const [cust, setCust] = useState('100');
-  const [part, setPart] = useState('100');
+  const [cust, setCust] = useState('50');
+  const [sign, setSign] = useState('5');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   useEffect(() => {
     if (cfg === undefined) return;
-    setActive(cfg?.active ?? true); setCust(String(cfg?.customerReward ?? 100)); setPart(String(cfg?.partnerReward ?? 100));
+    setActive(cfg?.active ?? true); setCust(String(cfg?.customerReward ?? 50)); setSign(String(cfg?.signupReward ?? 5));
   }, [cfg]);
 
   const save = async () => {
     setBusy(true); setMsg('');
-    try { await saveReferralConfig({ active, customerReward: Number(cust) || 0, partnerReward: Number(part) || 0 }); setMsg('Saved. New referrals use these amounts.'); }
+    try { await saveReferralConfig({ active, customerReward: Number(cust) || 0, signupReward: Math.min(Number(sign) || 0, Number(cust) || 0), partnerReward: 0 }); setMsg('Saved. New referrals use these amounts.'); }
     catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
   const field = (v: string, set: (t: string) => void) => (
@@ -42,14 +42,14 @@ export default function AdminReferrals() {
       </View>
       <Panel title="Rewards" wide>
         <View className="flex-row items-center justify-between"><Text className="font-jks text-[13.5px] text-ink dark:text-ink-dark">Referrals on</Text><Switch value={active} onValueChange={setActive} /></View>
-        <View className="flex-row items-center justify-between"><Tiny>Customer invites a friend (credit after the friend's first booking)</Tiny>{field(cust, setCust)}</View>
-        <View className="flex-row items-center justify-between"><Tiny>Expert invites an expert (paid after the new expert's first job)</Tiny>{field(part, setPart)}</View>
+        <View className="flex-row items-center justify-between"><Tiny>Total credit per friend who books</Tiny>{field(cust, setCust)}</View>
+        <View className="flex-row items-center justify-between"><Tiny>Of that, paid when the friend signs up</Tiny>{field(sign, setSign)}</View>
         <Btn title="Save" size="sm" busy={busy} onPress={save} />
         {msg ? <Tiny>{msg}</Tiny> : null}
       </Panel>
       <Panel title="Latest referrals" wide>
-        <Table head={['Friend', 'Phone', 'Side', 'Status', 'Reward', 'When']}
-          rows={rows.slice(0, 50).map((r) => [r.name, r.phone, r.side, r.status, inr(r.reward), whenLabel(r.joinedAt ?? r.invitedAt)])} />
+        <Table head={['Friend', 'Phone', 'Status', 'Reward', 'When']}
+          rows={rows.slice(0, 50).map((r) => [r.name, r.phone, r.status === 'joined' ? 'credit added' : 'signed up', inr(r.reward), whenLabel(r.joinedAt ?? r.invitedAt)])} />
       </Panel>
     </ScrollView>
   );

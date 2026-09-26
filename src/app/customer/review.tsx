@@ -70,7 +70,10 @@ export default function Review() {
     return () => clearTimeout(t);
   }, [justApplied]);
   const couponOff = applied?.amount ?? 0;
-  const rewardOff = Math.min(profile?.rewards ?? 0, Math.max(0, base - couponOff));
+  // Sahayak credit (from referrals) is her choice to use; on by default when she has some.
+  const [useCredit, setUseCredit] = useState(true);
+  const credit = profile?.rewards ?? 0;
+  const rewardOff = useCredit ? Math.min(credit, Math.max(0, base - couponOff)) : 0;
   const due = Math.max(0, base - couponOff - rewardOff);
   const skilled = partners.filter((p) => p.onShift && skills.every((sk) => p.skills.includes(sk)) && (!address || distanceM(p.at, address.at) < 3000));
   const nearby = skilled.length;
@@ -90,12 +93,12 @@ export default function Review() {
   const pay = async () => {
     if (!address) return;
     setBusy(true); setErr(''); setNote('');
-    const key = `${tasks.join(',')}|${durationMin}|${scheduledFor}|${applied?.code ?? ''}|${address.id}`;
+    const key = `${tasks.join(',')}|${durationMin}|${scheduledFor}|${applied?.code ?? ''}|${address.id}|${useCredit}`;
     try {
       // A checkout that was closed or failed is reused on the next tap, so a retry never makes a second booking.
       let o = lastOrder.current?.key === key ? lastOrder.current.o : null;
       if (!o) {
-        o = await createOrder({ tasks, durationMin, addressId: address.id, scheduledFor, coupon: applied?.code });
+        o = await createOrder({ tasks, durationMin, addressId: address.id, scheduledFor, coupon: applied?.code, useRewards: useCredit });
         if (o.amount === 0) { openBooking(o.bookingId); return; }
         lastOrder.current = { key, o };
       }
@@ -141,10 +144,23 @@ export default function Review() {
           <Eyebrow>Bill</Eyebrow>
           <SplitRow label={`Expert for ${durationMin} min`} value={inr(base)} />
           {couponOff && applied ? <SplitRow label={`Coupon ${applied.code}`} value={`-${inr(couponOff)}`} /> : null}
-          {rewardOff ? <SplitRow label="Referral reward" value={`-${inr(rewardOff)}`} /> : null}
+          {rewardOff ? <SplitRow label="Sahayak credit" value={`-${inr(rewardOff)}`} /> : null}
           <View className="h-px bg-line2 dark:bg-line2-dark" />
           <SplitRow label="Pay now" value={inr(due)} strong />
         </Card>
+
+        {credit > 0 ? (
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: useCredit }} onPress={() => setUseCredit(!useCredit)}
+            className="flex-row items-center gap-3 rounded-[24px] bg-paper px-4 py-4 active:opacity-90 dark:bg-paper-dark">
+            <View className={`h-6 w-6 items-center justify-center rounded-md border-[1.5px] ${useCredit ? 'border-ok bg-ok dark:border-ok-dark dark:bg-ok-dark' : 'border-line dark:border-line-dark'}`}>
+              {useCredit ? <Check size={14} color="#FFFFFF" /> : null}
+            </View>
+            <View className="flex-1">
+              <Text className="font-jkb text-[15px] text-ink dark:text-ink-dark">Use Sahayak credit</Text>
+              <Tiny>{`${inr(credit)} available${useCredit && rewardOff ? ` · ${inr(rewardOff)} used on this booking` : ''}`}</Tiny>
+            </View>
+          </Pressable>
+        ) : null}
 
         <Pressable accessibilityRole="button" accessibilityLabel={applied ? `Coupon ${applied.code} applied. Change coupon` : 'Apply a coupon'}
           onPress={() => router.push({ pathname: '/customer/coupons', params: { price: String(base), ...(applied ? { applied: applied.code } : {}) } })}

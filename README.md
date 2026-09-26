@@ -1,271 +1,204 @@
-# Sahayak
+<p align="center">
+  <img src="docs/images/hero.jpg" alt="Sahayak — house help in ten minutes" width="100%">
+</p>
 
-A ten-minute home-services app in the Snabbit / Pronto mould. **Three apps in one Expo
-project** on a **real Firebase backend** with **Razorpay** payments:
+<h1 align="center">Sahayak</h1>
 
-| App | Runs on | What it does |
-|---|---|---|
-| **Customer** | phone | Phone sign-in, book now or schedule, pay with Razorpay, live map tracking, wallet, referrals, help |
-| **Partner** | phone | Phone sign-in, shifts, job offers on a map, start code → checklist → finish, earnings, referrals |
-| **Admin** | web (and phone) | Email sign-in, live ops, bookings with force-assign and refund, partners, feedback, dispatch rules |
+<p align="center">
+  <b>House help in ten minutes.</b> Verified experts for sweeping, mopping, dishes and kitchen work — booked by the hour, paid online, tracked live.
+</p>
 
-Book a job in the customer app and the same job appears as an offer in the partner app and on the
-admin console, because all three read the same Firestore. Dispatch, pricing, payment
-verification and refunds run in Cloud Functions — the phone never decides who gets the job or how
-much is charged.
+<p align="center">
+  <img alt="Expo" src="https://img.shields.io/badge/Expo-React%20Native-000?logo=expo&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white">
+  <img alt="Firebase" src="https://img.shields.io/badge/Firebase-Auth%20%C2%B7%20Firestore%20%C2%B7%20Functions-FFCA28?logo=firebase&logoColor=black">
+  <img alt="Razorpay" src="https://img.shields.io/badge/Payments-Razorpay-0C2451?logo=razorpay&logoColor=white">
+  <img alt="Vite" src="https://img.shields.io/badge/Ops%20website-Vite%20%2B%20React-646CFF?logo=vite&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="#-see-it-work">Demo</a> ·
+  <a href="#-screens">Screens</a> ·
+  <a href="#-run-it-on-your-computer">Run it</a> ·
+  <a href="#-how-money-moves">Money</a> ·
+  <a href="#-go-live">Go live</a> ·
+  <a href="#-project-layout">Layout</a>
+</p>
 
 ---
 
-## 1 · Run the app
+## What it is
 
-```bash
-cd ~/OpenSource/sahayak
-npm install
-cp .env.example .env      # fill in Firebase + Razorpay values (section 2)
-npm start                 # Expo Go — press i, a, or w
-```
+Three products that share one backend, so a booking made on one phone shows up everywhere at once:
 
-With an empty `.env` the app opens on a setup screen instead of crashing.
-
-### Run everything locally, with no paid services
-
-```bash
-npm run firebase:emulators          # Auth + Firestore + Functions on your Mac (needs Java)
-# .env: EXPO_PUBLIC_USE_EMULATORS=true, then
-npx expo start --go --clear         # press i
-```
-
-In this mode the OTP is shown on screen (the emulator never sends SMS), payments use a
-test sheet instead of Razorpay, and nothing touches the cloud project or the Blaze plan.
-
-## 2 · Backend setup (one time, ~20 minutes)
-
-### Firebase — already done for project `sahayak-b3d2a`
-
-Set up on 22 Sep 2026:
-
-- **Android app** `com.sahayak.app` registered → `google-services.json` in the project root
-- **Web app** "Sahayak Web" registered → values in `.env`
-- **Authentication**: Email/Password, Google (support email set, Web client id in `.env`) and Phone
-  (test number `+91 99999 99999` / code `123456`, no SMS sent)
-- **Firestore** created in `asia-south1` (Mumbai), production rules
-
-Still to do, and it needs your keys:
-
-1. **Upgrade to Blaze** (console → Upgrade). Free at this scale; Cloud Functions need it.
-2. **SHA-1 / SHA-256** for the Android build, or Google and Phone sign-in fail on a real
-   phone. After `eas init`, run `eas credentials -p android` → it prints the fingerprints of the
-   keystore EAS builds with. Add both under Firebase → Project settings → Sahayak Android →
-   Add fingerprint. Then download a fresh `google-services.json` from that page and replace the
-   one here (it gains an Android OAuth client).
-3. Deploy rules and functions: `npm run firebase:deploy` (after `firebase login`).
-
-How the app talks to Firebase:
-
-| Platform | SDK | Config source |
+| | Who uses it | What they do |
 |---|---|---|
-| Android / iOS build | React Native Firebase (native) | `google-services.json` / `GoogleService-Info.plist` |
-| Web (admin console) | Firebase JS SDK | `EXPO_PUBLIC_FIREBASE_*` in `.env` |
+| 🏠 **Customer app** | People who need help at home | Sign in with phone + OTP, save addresses, book now or pick a slot, apply a coupon, pay with Razorpay, track the expert on a map, add time, rate, refer friends |
+| 🧹 **Expert app** | House-help experts | Sign up with Aadhaar + selfie, go online, accept job offers, ride to the door, start with a 4-digit code, tick tasks on a timer, withdraw earnings |
+| 🖥️ **Ops website** | The Sahayak team | Watch the day live, approve experts, draw service areas, run coupons and referrals, handle refunds and payouts |
 
-`src/lib/fb/*.ts` are the web versions; `*.native.ts` beside them are what Metro picks on a phone.
-The rest of the app imports from `src/lib/fb/` and never knows which one it got.
+The customer and expert apps live in one Expo project (the launcher lets you pick). The ops website is a separate
+Vite app in `admin-web/`. Prices, dispatch, payment checks and refunds all run on the server
+(Cloud Functions), so the phone can never decide who gets a job or how much is charged.
 
-| Expo Go | Firebase JS SDK (falls back automatically) | `.env` |
+---
 
-`src/lib/fb/runtime.ts` decides at startup. **Expo Go** gets the JS SDK, so Firestore and
-Cloud Functions work there unchanged.
+## 🎬 See it work
 
-### Sign-in: mobile number + OTP
+<table>
+  <tr>
+    <th width="50%">Customer: book, pay, refer</th>
+    <th width="50%">Expert: offer → door → working</th>
+  </tr>
+  <tr>
+    <td><img src="docs/video/customer.gif" alt="Customer booking flow" width="100%"></td>
+    <td><img src="docs/video/expert.gif" alt="Expert job flow" width="100%"></td>
+  </tr>
+</table>
 
-Customers and partners sign in with a mobile number only (`src/app/login.tsx`): number → 6-digit
-SMS OTP → name on the first visit. Staff use email on the ops console.
+▶️ **Full walkthrough video (70 s, customer + expert + ops website):** [`docs/video/sahayak-demo.mp4`](docs/video/sahayak-demo.mp4)
 
-| Where | How the SMS gets sent |
-|---|---|
-| Android / iOS build | React Native Firebase, no captcha step (needs the app's SHA-1/SHA-256 in Firebase) |
-| Expo Go | Firebase JS SDK; `src/components/RecaptchaGate.tsx` renders Firebase's reCAPTCHA in a WebView that runs on your `authDomain`, so the SMS goes out without a native build. Usually invisible; a puzzle appears only if Google is unsure |
-| Web | Firebase JS SDK with an invisible reCAPTCHA on the page |
+---
 
-While testing, **+91 99999 99999** with OTP **123456** is a Firebase test number (Authentication →
-Sign-in method → Phone → *Phone numbers for testing*): it signs in without sending an SMS and
-without counting against the daily quota. Google sign-in remains wired up in `src/lib/fb/auth.*`
-but is not shown on the sign-in screen.
+## 📱 Screens
 
-### Razorpay
+### Customer app
 
-1. Sign up at razorpay.com and stay in **Test mode**.
-2. **Settings → API Keys → Generate test key.**
-3. `EXPO_PUBLIC_RAZORPAY_KEY_ID` in `.env` gets the **key id** (starts `rzp_test_`).
-4. `functions/.env` gets both the key id and the **key secret** (copy `functions/.env.example`).
-   The secret never leaves the server.
-5. **Webhook** (backup for when the phone closes mid-payment): Razorpay → Settings → **Webhooks** → Add →
-   URL `https://asia-south1-<project-id>.cloudfunctions.net/razorpayWebhook`, events **payment.captured** and
-   **payment.failed**, and a secret → put the same secret in `functions/.env` as `RAZORPAY_WEBHOOK_SECRET`.
-6. **RazorpayX** (paying experts): activate RazorpayX (a current account Razorpay runs for you) and add money
-   to it. Put its account number in `functions/.env` as `RAZORPAYX_ACCOUNT_NUMBER`. Add a RazorpayX webhook
-   to `https://asia-south1-<project-id>.cloudfunctions.net/razorpayXWebhook` with events **payout.processed**,
-   **payout.reversed**, **payout.failed** and put its secret in `RAZORPAYX_WEBHOOK_SECRET`.
-   On the emulator you can leave all of this empty: payouts are faked and marked paid with a `TESTUTR…` id.
-   Also set `KYC_HASH_SECRET` (`openssl rand -hex 32`) — it fingerprints Aadhaar numbers so one card
-   cannot sign up twice. Set it once and never change it.
-7. Optional: `EXPO_PUBLIC_ROUTING_URL` in `.env` points the road maps at your own OSRM server
-   (defaults to the public OpenStreetMap demo server, which is fine for testing only).
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/welcome.jpg" width="190"><br><sub><b>Pick who you are</b></sub></td>
+    <td align="center"><img src="docs/images/login.jpg" width="190"><br><sub><b>Phone + OTP sign-in</b></sub></td>
+    <td align="center"><img src="docs/images/home.jpg" width="190"><br><sub><b>Home</b></sub></td>
+    <td align="center"><img src="docs/images/book-now.jpg" width="190"><br><sub><b>Book now · ₹99 an hour</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/schedule.jpg" width="190"><br><sub><b>Slots only when an expert is free</b></sub></td>
+    <td align="center"><img src="docs/images/review.jpg" width="190"><br><sub><b>Review the bill</b></sub></td>
+    <td align="center"><img src="docs/images/coupons.jpg" width="190"><br><sub><b>Coupons & offers</b></sub></td>
+    <td align="center"><img src="docs/images/razorpay.jpg" width="190"><br><sub><b>Razorpay checkout (test)</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/refer.jpg" width="190"><br><sub><b>Refer & earn</b></sub></td>
+    <td align="center"><img src="docs/images/coming-soon.jpg" width="190"><br><sub><b>Coming soon + waitlist</b></sub></td>
+    <td align="center"><img src="docs/images/account.jpg" width="190"><br><sub><b>Account</b></sub></td>
+    <td></td>
+  </tr>
+</table>
 
-### Deploy the backend
+### Expert app
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/expert-online.jpg" width="150"><br><sub><b>Go online</b></sub></td>
+    <td align="center"><img src="docs/images/expert-offer.jpg" width="150"><br><sub><b>Job offer</b></sub></td>
+    <td align="center"><img src="docs/images/expert-ride.jpg" width="150"><br><sub><b>Ride to the door</b></sub></td>
+    <td align="center"><img src="docs/images/expert-code.jpg" width="150"><br><sub><b>Start code</b></sub></td>
+    <td align="center"><img src="docs/images/expert-working.jpg" width="150"><br><sub><b>Working, on the clock</b></sub></td>
+  </tr>
+</table>
+
+### Ops website
+
+<table>
+  <tr>
+    <td><img src="docs/images/admin-overview.jpg" alt="Overview"><br><sub><b>Overview</b> — today's bookings, money in, who is online</sub></td>
+    <td><img src="docs/images/admin-areas.jpg" alt="Service areas"><br><sub><b>Service areas</b> — pin + range, Live / Coming soon / Paused</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/admin-experts.jpg" alt="Experts"><br><sub><b>Experts</b> — Aadhaar and selfie review, approve, suspend</sub></td>
+    <td><img src="docs/images/admin-bookings.jpg" alt="Bookings"><br><sub><b>Bookings</b> — assign an expert, cancel and refund</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/admin-coupons.jpg" alt="Coupons"><br><sub><b>Coupons</b> — flat or %, limits, dates</sub></td>
+    <td><img src="docs/images/admin-referrals.jpg" alt="Referrals"><br><sub><b>Referrals</b> — set rewards, see every invite</sub></td>
+  </tr>
+</table>
+
+---
+
+## ✨ Features
+
+**Booking**
+- Book now (nearest free expert, about 10 minutes away) or schedule for today / tomorrow.
+- Time slots appear only when a trained expert within 5 km is free at that time — no booking you can't get.
+- Pay for time, not per task: **1 h ₹99 · 1.5 h ₹149 · 2 h ₹189 · 3 h ₹279**. Ticked tasks are her checklist, not extra charges.
+- Add time during the visit (+15 / +30 / +60 min) from the tracking screen.
+
+**Where we serve**
+- Ops draws service areas on a map (a pin with a range, or a real district border).
+- Addresses can be saved anywhere, but booking opens only inside a Live area.
+- Outside an area, Home turns into a shareable **Coming soon** page with a waitlist and a count of neighbours waiting.
+
+**Offers**
+- A proper Coupons page: best offer on top, the ones that don't fit yet with the reason ("Add ₹100 more").
+- Coupons are **never applied automatically** — the customer chooses. The server checks every rule again at payment.
+- **Refer & earn** (customers only): the friend enters the code after sign-up; the referrer gets **₹5 at once** and **₹45 more** after the friend's first booking. Credit comes off the next booking and is never paid out as cash.
+
+**Experts**
+- Sign-up with Aadhaar (checksum-checked, only the last 4 digits stored) and a selfie; ops approves.
+- Offers show distance, tasks and pay; a 4-digit start code at the door starts the clock.
+- Wallet with UPI / bank payout through RazorpayX, withdraw any time or weekly auto-payout.
+
+**Payments**
+- Razorpay checkout; the server verifies the signature and the amount before a booking counts as paid.
+- Automatic refunds when no expert is found or the customer cancels in time.
+
+---
+
+## 🚀 Run it on your computer
+
+Everything runs locally on the Firebase emulators — no cloud project, no paid plan, no real SMS.
+
+**You need:** Node 22, Java 17+ (for the emulators), Xcode (iOS simulator) or an Android phone with **Expo Go**.
 
 ```bash
-npm install -g firebase-tools
-firebase login
-firebase deploy --only firestore:rules,firestore:indexes,functions
+git clone <this repo> sahayak && cd sahayak
+npm install
+npm --prefix functions install
+npm --prefix admin-web install
+
+cp .env.example .env                 # set EXPO_PUBLIC_USE_EMULATORS=true
+cp functions/.env.example functions/.env   # optional: Razorpay test keys
 ```
 
-### Make yourself an admin
-
-1. Firebase → Authentication → Users → **Add user** with an email and password.
-2. Firestore → start a collection **`admins`** → document id = that user's **UID** → any field (e.g. `role: "ops"`).
-3. Open the app → **Ops console** → sign in.
-
-On the local emulators you can skip this: the ops sign-in screen has **Use the test admin**, which creates `ops@sahayak.test` / `sahayak123` and adds it to `admins`.
-
-### Admin website
-
-A separate web dashboard for ops lives in `admin-web/` (Vite + React). It uses the same Firebase
-project and the same `admins` list as the in-app console.
+Then, in three terminals:
 
 ```bash
-npm --prefix admin-web install     # once
-npm run admin:dev                  # http://localhost:5174 (talks to the emulators)
-npm run admin:deploy               # build + Firebase Hosting
+npm run firebase:emulators           # 1 · Auth + Firestore + Functions (+ ops website at :5002)
+npx expo start --go --clear          # 2 · the app — press i for the iOS simulator, or scan the QR with Expo Go
+npm run admin:dev                    # 3 · ops website at http://localhost:5174
 ```
 
-On the emulator, the Overview page of an empty database shows **Load test data**: it fills every page with
-clearly-fake sample data (experts at each stage incl. one waiting with sample ID photos, a week of bookings,
-payouts, a coupon, waitlist entries and referrals) so you can try each flow.
+### Try the whole flow
 
-`npm run firebase:emulators` also serves the last build at http://127.0.0.1:5002 (run `npm run admin:build`
-first, then restart the emulators). Copy `admin-web/.env.example` to `admin-web/.env` for a real project.
+1. **Ops website** → *Use the test admin* (emulator only) → Service areas → add an area around your test address and set it **Live**.
+2. Overview → **Load test data** fills every page with clearly fake sample data. For experts who accept jobs on their own,
+   press **Load demo experts** in the app (customer Home when nobody is online, or the in-app ops console): five bots appear
+   around your address and ride to the door by themselves.
+3. **App** → *I need help at home* → any 10-digit number. The OTP never goes by SMS on the emulator: it is printed in the emulator terminal and listed at
+   `http://127.0.0.1:9099/emulator/v1/projects/demo-sahayak/verificationCodes`.
+4. Add an address inside the area → **Book now** → Review → pick a coupon → **Pay with Razorpay**.
+   In test mode use card `4111 1111 1111 1111` (any future date, any CVV).
+5. A demo expert accepts, rides over on the map and you get a start code.
 
-What it does:
+**To try the expert side,** sign in as an expert on a second device or simulator. Sign-up takes 5 steps;
+`234123412346` is a valid test Aadhaar number. Approve her on the ops website (Experts), then turn her **online**.
 
-| Page | What you can do |
-| --- | --- |
-| Overview | Today's bookings, money in, experts online, queue to review |
-| Experts | Review Aadhaar front/back + selfie, approve or send back with a reason, set area, suspend, see wallet |
-| Bookings | Every booking with status, coupon and amount |
-| Payouts | Withdrawals, failed payouts, hold / release an earning, pay now |
-| Service areas | Search any colony, road or city ("Patel Nagar") and drop a **pin with a range** (drag it, 0.5–30 km), or pick State → District for a real border. Click the map to check a spot or add an area there. Each area is **Live**, **Coming soon** (with a launch date — it opens by itself that morning) or **Paused** |
-| Coupons | Flat or % off, max discount, min order, first order only, per-user and total limits, dates, public or hidden |
-| Waitlist | People outside every area, how far they are, mark invited, export CSV |
-| Referrals | Switch referrals on/off and set both rewards |
-| Customers | Look someone up and give credit |
+<details>
+<summary><b>Testing on your own Android phone</b></summary>
 
-### Load demo experts
+- **Same Wi-Fi (easiest).** Phone and computer on the same Wi-Fi, Expo Go installed. Restart the emulators, allow incoming connections if macOS asks, then scan the QR code. The app finds your computer by itself.
+- Office or public Wi-Fi often blocks phone-to-laptop traffic — use your phone's hotspot for the laptop instead.
+- Expo Go on Android shows OpenStreetMap maps (its Google map is blank without a native build).
+- **Different network:** `npx expo start --go --tunnel`. The tunnel carries only the app, not the emulators, so point the app at a real Firebase project for this.
+- The ops website on the phone: `npm run admin:dev:lan`, then open `http://<computer-ip>:5174` (`ipconfig getifaddr en0`).
 
-Nobody is on shift in a fresh database. From the admin console (or the partner app's shift tab)
-press **Load demo experts**. Five bot partners appear who accept jobs and ride to the door on
-their own, so one person can test the whole flow.
+</details>
 
-## 3 · Test the whole thing
+<details>
+<summary><b>Native builds with EAS</b></summary>
 
-1. Launcher → **I need help at home** → any 10-digit number and a name → Continue.
-2. **Book now** → pick a duration → **Review** → **Pay with Razorpay**.
-3. Razorpay test checkout opens. Use any test card (`4111 1111 1111 1111`, any future date, any CVV) or a test UPI id (`success@razorpay`).
-4. Watch the matching screen: stage 1 direct assign, stage 2 broadcast if needed.
-5. A demo expert accepts, rides to your door on the map, you get a start code.
-6. Tap **She has started**. The job runs ~90 seconds, then completes.
-7. While she works, tap **+15 min** to extend: pay through Razorpay and watch the timer move.
-8. Rate it. The expert's payout appears under Partners → Payouts in the ops console.
-9. Open the **admin console** in a browser (`npm run web`) and see every step land there live.
-
-To test the partner side yourself: sign in as a partner on a second device (or the simulator).
-A new expert first goes through **sign-up** (5 steps: about you → your work → Aadhaar card number +
-front and back photos → selfie → check and send). `234123412346` is a valid test Aadhaar number.
-She then sees *Under review* until an admin approves her (Admin website → Experts). After approval
-she can turn **on shift** on and book from the customer app. The offer arrives with a map and a 20-second
-countdown.
-
-## 4 · How money moves
-
-**You pay for time, not per task.** **1 h ₹99** · 1.5 h ₹149 · 2 h ₹189 · 3 h ₹279 · extra time ₹2 a minute
-(`PRICE_BY_MIN` in `src/lib/mock.ts` and `functions/src/catalog.ts` — keep them identical).
-The tasks you tick are her checklist for that time; adding a task never adds to the bill.
-
-```
-Customer pays
-  Review → createOrder (server prices the time, applies FIRST50 + rewards, creates a Razorpay order, auto-capture)
-         → Razorpay checkout in a WebView (failed attempts can be retried inside the checkout)
-         → verifyPayment: HMAC signature + fetch the payment from Razorpay (right order, right amount, captured)
-         → booking is paid → dispatch (or the reserved expert for a scheduled slot)
-  razorpayWebhook does the same if the app closed before verifying; a payment that lands after the
-  booking expired is refunded automatically.
-
-Extra time during the visit
-  Track screen → +15 / +30 / +60 min → createExtensionOrder → checkout → verifyExtension
-  → minutes added, session end moved (both phones update live). Ends while paying → refunded.
-
-Expert gets paid (wallet + RazorpayX)
-  Visit completed → payExpert: 62% of the booked time + 62% of extra time + tips
-  → earnings/{bookingId} in her wallet, ready to withdraw 24 h later (2 min on the emulator)
-    A rating of 2★ or less puts it on hold until ops releases it. Sahayak covers any coupon gap.
-  → She adds a UPI id or bank account once (Earnings → Money goes to)
-  → Withdraw any time from ₹100, or leave "weekly auto-payout" on (every Monday 9 AM IST)
-  → withdrawFor locks the earnings and sends a RazorpayX payout (idempotent)
-  → razorpayXWebhook marks it paid (with the bank UTR) or failed; a failed payout goes back to her wallet.
-
-No expert found  → automatic refund via Razorpay
-Customer cancels → full refund before assignment (and 2 min after), ₹49 fee after
-```
-
-No customer wallet and no cash on delivery: every rupee a customer pays goes through Razorpay.
-Referral rewards are rupees off the next booking (`users.rewards`), released when the friend
-completes a first booking. Ops sets the reward amounts (or turns referrals off) in `config/referral`.
-
-**Coupons.** `coupons/{CODE}` — created on the admin website. The best public coupon is applied on
-the Review screen by itself; customers can also type a code. The server re-checks every rule in
-`createOrder`, so the app can never give itself a discount. `FIRST50` is built in.
-
-**Service areas.** `areas/{id}` — ops picks a state, then a district or a city, on the admin website.
-The area stores that place's **real border** from OpenStreetMap (encoded polylines, simplified to stay
-small), so "Gurugram" means exactly Gurugram district, not a circle around it. An address outside
-every live area can't be booked; the customer sees *We are not at this address yet* and can join the
-**waitlist**. When areas overlap (a city inside a whole state), the smaller one wins. With no areas at all,
-the app falls back to Gurugram (40 km). An area can also be a **pin with a range** (a circle) for a single
-colony or road. **Coming soon** areas have an `opensAt` date: customers there see "Sahayak starts here on
-<date>", can join the waitlist, and experts can already sign up; bookings open by themselves that morning.
-The border maths lives in `areaGeo.ts` — one identical copy each in `functions/src`, `src/lib` and
-`admin-web/src`. The district list for every state is bundled (`indiaDistricts.ts`); towns inside a
-district and the borders are fetched live from OpenStreetMap's free servers (Overpass and Nominatim).
-
-**Expert verification.** Aadhaar is checked with its checksum, only the last 4 digits and a keyed
-fingerprint are stored, and the three photos (`kycFiles`) are deleted 30 days after approval.
-Only the server can set `verified`; the rules stop an unverified or suspended expert from going on shift.
-
-**Referral is a link.** Account → Refer a friend → *Share my link* sends
-`https://sahayak-b3d2a.web.app/r/CODE`; opening the app from it (or `sahayak://r/CODE`) remembers
-the code until sign-up finishes (`src/lib/referral.ts`). Hosting that URL with a store redirect is
-the remaining step.
-
-## 5 · Testing on your own Android phone
-
-**Same Wi-Fi (easiest, no ngrok needed).** The emulators listen on your Wi-Fi address and the app finds your
-computer by itself.
-
-1. Phone and computer on the **same Wi-Fi**. Install **Expo Go** from the Play Store.
-2. Restart the emulators (`npm run firebase:emulators`). If macOS asks to allow incoming connections for Java / node, click **Allow**.
-3. `npx expo start --go --clear`, then scan the QR code with Expo Go.
-4. The admin website on the phone: `npm run admin:dev:lan`, then open `http://<computer-ip>:5174`
-   (find the IP with `ipconfig getifaddr en0`).
-
-Office or public Wi-Fi often blocks phone-to-laptop traffic. Use your phone's hotspot for the laptop instead.
-
-**Different network (ngrok).** `npx expo start --go --tunnel` sends the app through an ngrok tunnel
-(Expo installs `@expo/ngrok` the first time). The tunnel only carries the app's code, not the local
-emulators, so for this switch the app to the real Firebase project: set `EXPO_PUBLIC_USE_EMULATORS=false`
-and deploy the backend (section 2).
-
-## 6 · Testing on a real phone with EAS
-
-Expo Go runs everything above. A **development build** adds the native map:
+Expo Go runs everything above. A development build adds the native Google map:
 
 ```bash
 npm install -g eas-cli && eas login && eas init
@@ -274,58 +207,110 @@ npm run start:dev-client
 npm run update               # push JS changes without rebuilding
 ```
 
-## 7 · Layout
+</details>
+
+---
+
+## 💸 How money moves
 
 ```
-src/
-  app/                    expo-router file routes
-    index.tsx             launcher: pick an app or go straight to yours
-    login.tsx             phone sign-in (customer / partner)
-    customer/             (tabs) home · bookings · plans · account
-      service/[slug]  book/[slug]  review  matching/[id]  track/[id]  rate/[id]
-      plan/[id]  wallet  refer  help
-    partner/              (tabs) shift · earnings (wallet) · score · you
-      verify  payout  offer/[id]  job/[id]  shift/[id]  refer
-    admin/                login · live ops · bookings · experts · areas · coupons · waitlist · referrals · feedback
-  lib/
-    firebase.ts           app, auth, firestore, functions (emulator switch)
-    auth.tsx              AuthProvider — user, profile, partner doc, admin flag
-    db.ts                 live Firestore hooks (onSnapshot)
-    api.ts                typed calls to the Cloud Functions
-    mock.ts               service catalogue, plans, zones (catalogue must match functions/src/catalog.ts)
-  components/             ui, icons, maps, RazorpayCheckout, ReferralScreen, SetupScreen
-  theme/                  palettes.js — one word switches the whole colour scheme
-functions/src/
-  index.ts                createOrder · verifyPayment · dispatch · lifecycle · refunds · admin · seedDemo
-  catalog.ts              prices — the server's copy is the one that counts
-  razorpay.ts             orders, capture check, refunds, webhook + HMAC verify, RazorpayX payouts
-  kyc.ts                  expert sign-up, Aadhaar checks, admin review, suspend
-  wallet.ts               earnings, payout method, withdraw, weekly auto-payout, payout webhook
-  growth.ts               service areas, waitlist, coupons, referral settings, customer credit
-  shared.ts               db, admin check, shared types
-admin-web/                admin website (Vite + React + Leaflet), deployed to Firebase Hosting
-firestore.rules           who may read and write what
+Customer pays
+  Review → createOrder   server prices the time, checks the coupon and credit, creates a Razorpay order
+         → Razorpay checkout
+         → verifyPayment  signature (HMAC) + fetches the payment: right order, right amount, captured
+         → booking is paid → dispatch to the nearest free expert
+  razorpayWebhook does the same if the app closed before verifying.
+
+Extra time during the visit
+  Track → +15 / +30 / +60 min → pay → minutes added, both phones update live.
+
+Expert gets paid
+  Visit completed → 62% of the booked and extra time + tips → her wallet (withdrawable after 24 h)
+  → UPI or bank via RazorpayX, on demand from ₹100 or weekly auto-payout.
+  A rating of 2★ or less holds the earning until ops releases it.
+
+No expert found  → automatic refund
+Customer cancels → full refund before assignment, ₹49 fee after
 ```
 
-## 8 · Look and feel
+Prices live in two files that must match: `PRICE_BY_MIN` in `src/lib/mock.ts` (what the app shows)
+and `functions/src/catalog.ts` (what the server charges — the one that counts).
 
-Always dark, in the CRED mould: near-black ground, charcoal cards with hairlines, white pill
-buttons, coral `#FF6B52` as the single accent per screen, uppercase tracked labels. The light
-palette still exists for the web console; `src/theme/index.tsx` pins the scheme to dark.
+---
 
-## 9 · What is still mocked
+## 🌐 Go live
 
-- **Phone OTP on web** uses an invisible reCAPTCHA; on Android it is real SMS (10/day on the free plan).
-- **Plans / subscriptions** — visible, marked *coming soon*.
-- **Zone statistics** on the admin console — static until there are enough real bookings.
-- **Chat and calling** — UI only.
-- **Scheduled jobs** (`tick`, `weeklyPayouts`) don't run on the local emulators. On the emulator,
-  expired KYC photos are not cleaned up and the Monday auto-payout never fires — use **Withdraw**.
-- **Payouts on the emulator** are faked (no RazorpayX account number set).
+<details>
+<summary><b>Firebase</b></summary>
 
-## Checks
+1. Create a Firebase project on the **Blaze** plan (Cloud Functions need it; free at this scale).
+2. Add a **Web app** and copy its config into `.env` (`EXPO_PUBLIC_FIREBASE_*`) and `admin-web/.env` (`VITE_FIREBASE_*`).
+3. Turn on **Authentication → Phone** (and Email/Password for staff). Add a test number while you build.
+4. Create **Firestore** (e.g. `asia-south1`, Mumbai).
+5. For Android builds add the SHA-1 / SHA-256 from `eas credentials -p android`, then download `google-services.json` into the project root (it is git-ignored).
+6. Deploy: `firebase login` then `npm run firebase:deploy` and `npm run admin:deploy`.
+7. **Make yourself an admin:** Authentication → add a user with email + password → Firestore collection `admins` → document id = that user's UID.
+
+</details>
+
+<details>
+<summary><b>Razorpay</b></summary>
+
+1. Sign up at razorpay.com and stay in **Test mode** → Settings → API Keys → generate a test key.
+2. `EXPO_PUBLIC_RAZORPAY_KEY_ID` in `.env` gets the **key id** only.
+3. `functions/.env` gets the key id **and the secret** — the secret never leaves the server.
+4. Webhook → `https://asia-south1-<project-id>.cloudfunctions.net/razorpayWebhook`, events `payment.captured` and `payment.failed`, secret → `RAZORPAY_WEBHOOK_SECRET`.
+5. **RazorpayX** (paying experts): account number → `RAZORPAYX_ACCOUNT_NUMBER`; webhook → `.../razorpayXWebhook` with `payout.processed`, `payout.reversed`, `payout.failed`, secret → `RAZORPAYX_WEBHOOK_SECRET`.
+6. `KYC_HASH_SECRET` (`openssl rand -hex 32`) fingerprints Aadhaar numbers so one card can't sign up twice. Set it once, never change it.
+
+On the emulators you can leave all of this empty: payouts are faked and marked paid.
+
+</details>
+
+### Keeping secrets out of git
+
+`.gitignore` already blocks every `.env` file (only the `*.env.example` templates are committed),
+`google-services.json`, `GoogleService-Info.plist`, service-account JSON, `*.pem` / `*.key` / `*.p12`,
+Razorpay key downloads, emulator data and debug logs. The app only ever holds the **public**
+Razorpay key id; the secret stays in `functions/.env` on the server.
+
+---
+
+## 🗂 Project layout
+
+```
+src/app/                 screens (expo-router: one file = one route)
+  index.tsx              launcher — customer, expert or ops
+  login.tsx              phone + OTP, name, referral code
+  customer/              (tabs) home · bookings · account
+                         address · book · review · coupons · matching · track · rate
+                         payments · refer · coming-soon
+  partner/               (tabs) jobs · earnings · profile
+                         verify (sign-up) · offer · job · payout
+  admin/                 in-app ops console
+src/components/          ui kit, icons, maps (native + OpenStreetMap fallback), Razorpay checkout
+src/lib/                 Firebase, auth, live data hooks, typed API calls, prices, service areas
+functions/src/           Cloud Functions
+  index.ts               orders, payment checks, dispatch, slots, visit lifecycle, refunds
+  growth.ts              service areas, waitlist, coupons, referrals, customer credit
+  kyc.ts · wallet.ts     expert sign-up and Aadhaar checks · earnings and payouts
+  razorpay.ts            orders, refunds, webhooks, RazorpayX
+  catalog.ts             prices — the server's copy is the one that counts
+admin-web/               ops website (Vite + React + Leaflet) → Firebase Hosting
+firestore.rules          who can read and write what
+docs/                    README images and demo video
+```
+
+## ✅ Checks
 
 ```bash
-npm run typecheck && npm run lint && npm run export:web
-cd functions && npm run typecheck
+npm run typecheck && npm run lint
+npm --prefix functions run typecheck
+npm --prefix admin-web run build
 ```
+
+## Still to do
+
+- Plans / subscriptions, in-app chat and calling are UI only.
+- Scheduled jobs (auto-open "coming soon" areas, weekly payouts) don't run on the local emulators.
+- The referral share link needs a hosted page that redirects to the store.

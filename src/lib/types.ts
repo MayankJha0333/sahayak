@@ -91,7 +91,8 @@ export type WaitlistDoc = {
   soonAreaId?: string | null; opensAt?: number | null;
 };
 
-export type ReferralConfig = { active: boolean; customerReward: number; partnerReward: number };
+/** customerReward: total per friend. signupReward: the part paid when the friend signs up (the rest after their first booking). */
+export type ReferralConfig = { active: boolean; customerReward: number; signupReward?: number; partnerReward: number };
 
 export type WithdrawalDoc = {
   partnerId: string; partnerName: string; amount: number; earningIds: string[];
@@ -175,6 +176,8 @@ export type ShiftDoc = {
 export type ReferralDoc = {
   referrerId: string; refereeId?: string; side: 'customer' | 'partner'; name: string; phone: string;
   status: 'invited' | 'joined'; invitedAt: number; joinedAt?: number; reward: number;
+  /** Credit already given for this friend (the sign-up part, then all of it). */
+  signupPaid?: number; paid?: number;
 };
 
 export type FeedbackDoc = { userId: string; kind: 'feedback' | 'request' | 'problem'; text: string; bookingId?: string; at: number; /** Written by the server for a rating of 2★ or less. */ auto?: boolean };

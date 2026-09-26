@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role, phone, name, rewards: 0, referralCode: code(),
           // No made-up address: the customer drops her own pin on the map before the first booking.
           addresses: [], createdAt: Date.now(),
-          ...(extras?.referralCode ? { referredBy: extras.referralCode.trim().toUpperCase() } : {}),
+          // A referral code is attached afterwards by the server (applyReferral), which checks it first.
         };
         await setDoc(ref, profileDoc);
       }

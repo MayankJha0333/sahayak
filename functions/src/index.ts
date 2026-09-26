@@ -709,28 +709,21 @@ async function onCompleted(b: Booking) {
 
   if (user && !user.firstBookingDone) {
     await uref.update({ firstBookingDone: true });
+    // Her first completed booking releases her friend's credit (customers only; experts do not refer).
     if (user.referredBy && refCfg.active && refCfg.customerReward > 0) {
       const refUser = await db.collection('users').where('referralCode', '==', user.referredBy).limit(1).get();
       if (!refUser.empty) {
         const referrer = refUser.docs[0];
-        await addReward(referrer.id, refCfg.customerReward);
-        // The link carried the code, so this is the first we hear of the friend: record it now.
-        await db.collection('referrals').add({
+        const rref = db.collection('referrals').doc(`${referrer.id}_${b.customerId}`);
+        const prev = (await rref.get()).data() as { signupPaid?: number; reward?: number } | undefined;
+        // The total promised when she signed up; the sign-up part was already paid, so add the rest.
+        const total = prev?.reward ?? refCfg.customerReward;
+        const rest = Math.max(0, total - (prev?.signupPaid ?? 0));
+        if (rest > 0) await addReward(referrer.id, rest);
+        await rref.set({
           referrerId: referrer.id, refereeId: b.customerId, side: 'customer', name: user.name, phone: user.phone,
-          status: 'joined', invitedAt: Date.now(), joinedAt: Date.now(), reward: refCfg.customerReward,
-        });
-      }
-    }
-  }
-
-  if (b.partnerId) {
-    const pref = db.collection('partners').doc(b.partnerId);
-    const p = (await pref.get()).data() as PartnerDoc | undefined;
-    if (p && !p.firstJobDone) {
-      await pref.update({ firstJobDone: true });
-      if (p.referredBy && refCfg.active && refCfg.partnerReward > 0) {
-        const refUser = await db.collection('users').where('referralCode', '==', p.referredBy).limit(1).get();
-        if (!refUser.empty) await db.collection('partners').doc(refUser.docs[0].id).update({ referralEarned: FieldValue.increment(refCfg.partnerReward) });
+          status: 'joined', joinedAt: Date.now(), reward: total, paid: total, ...(prev ? {} : { invitedAt: Date.now() }),
+        }, { merge: true });
       }
     }
   }

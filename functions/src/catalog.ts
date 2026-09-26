@@ -32,7 +32,9 @@ export const CLOSE_HOUR = 19;
 export const istMinutes = (ms: number) => { const d = new Date(ms + 330 * 60_000); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
 export const isOpenAt = (ms: number) => { const m = istMinutes(ms); return m >= OPEN_HOUR * 60 && m <= CLOSE_HOUR * 60; };
 export const FIRST_COUPON = { code: 'FIRST50', amount: 50 };
-export const REFERRAL_REWARD = 100;
+/** What a customer earns per friend: ₹5 when the friend signs up with her code, the rest (₹45) after the friend's first booking. */
+export const REFERRAL_REWARD = 50;
+export const REFERRAL_SIGNUP_REWARD = 5;
 export const PARTNER_SHARE = 0.62;
 
 export const STAGE1_MS = 20_000;

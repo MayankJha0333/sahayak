@@ -44,5 +44,5 @@ export type Coupon = {
   startsAt?: number | null; endsAt?: number | null; createdAt: number;
 };
 export type Waitlist = { userId: string; name: string; phone: string; at: LatLng; line: string; city: string; status: 'waiting' | 'notified'; createdAt: number };
-export type Referral = { referrerId: string; refereeId?: string; side: string; name: string; phone: string; status: string; invitedAt: number; joinedAt?: number; reward: number };
-export type ReferralConfig = { active: boolean; customerReward: number; partnerReward: number };
+export type Referral = { referrerId: string; refereeId?: string; side: string; name: string; phone: string; status: string; invitedAt: number; joinedAt?: number; reward: number; paid?: number };
+export type ReferralConfig = { active: boolean; customerReward: number; signupReward?: number; partnerReward: number };

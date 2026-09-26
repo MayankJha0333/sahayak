@@ -44,6 +44,10 @@ export type CouponInfo = {
 };
 /** Coupons that fit this booking (with the saving) and the ones that do not yet (with why). */
 export const listMyCoupons = call<{ price: number }, { coupons: (CouponInfo & { amount: number })[]; unavailable?: (CouponInfo & { reason: string })[] }>('listMyCoupons');
+/** Referral codes (customers only): check whose code it is, then attach it once, before the first booking. */
+type ReferralOffer = { ok: true; referrerName: string; reward: number; signupReward: number };
+export const checkReferralCode = call<{ code: string }, ReferralOffer>('checkReferralCode');
+export const applyReferral = call<{ code: string }, ReferralOffer>('applyReferral');
 /** How many people are already waiting within 3 km of a spot (only the count). */
 export const waitlistNear = call<{ at: LatLng }, { near: number }>('waitlistNear');
 export const joinWaitlist = call<{ at: LatLng; line?: string; city?: string }, { ok: true; served: boolean; opensAt?: number | null; areaName?: string | null; phone?: string }>('joinWaitlist');

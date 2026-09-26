@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandPanel } from '@/components/BrandPanel';
-import { Book, CalendarDays, ChevronRight, CreditCard, Headphones, Info, MapPin, Shield } from '@/components/icons';
+import { Book, CalendarDays, ChevronRight, CreditCard, Gift, Headphones, Info, MapPin, Shield } from '@/components/icons';
 import { Avatar, Btn, Divider, H, Tiny, shadow } from '@/components/ui';
 import { setDefaultAddress } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -60,6 +60,18 @@ export default function Account() {
           {tile(CreditCard, 'Payments', () => router.push('/customer/payments'))}
           {tile(Headphones, 'Help & support', () => router.push('/help'))}
         </View>
+
+        {/* Refer & earn, with her credit */}
+        <Pressable accessibilityRole="button" onPress={() => router.push('/customer/refer')} className="active:opacity-90">
+          <BrandPanel radius={22} style={{ paddingHorizontal: 16, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-white/20"><Gift size={22} color="#FFFFFF" /></View>
+            <View className="flex-1">
+              <Text className="font-jkx text-[17px] text-white">Refer & earn</Text>
+              <Text className="font-jkm text-[12.5px] text-white/85">{(profile?.rewards ?? 0) > 0 ? `${inr(profile!.rewards)} credit · invite more friends` : 'Get credit for every friend who books'}</Text>
+            </View>
+            <ChevronRight size={20} color="#FFFFFF" />
+          </BrandPanel>
+        </Pressable>
 
         <View className="overflow-hidden rounded-[22px] bg-paper dark:bg-paper-dark" style={shadow}>
           <View className="px-4 pb-1 pt-4"><Text className="font-jks text-[13px] text-ink3 dark:text-ink3-dark">Saved addresses</Text></View>

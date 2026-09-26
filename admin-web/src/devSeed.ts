@@ -130,9 +130,9 @@ export async function loadTestData() {
 
   // A coupon, the referral settings and a couple of referrals
   w('coupons/DIWALI100', { code: 'DIWALI100', title: '₹100 off for Diwali', type: 'flat', value: 100, minOrder: 150, perUserLimit: 1, active: true, public: true, used: 2, createdAt: now - 7 * D, startsAt: null, endsAt: now + 20 * D });
-  w('config/referral', { active: true, customerReward: 100, partnerReward: 150, updatedAt: now });
-  w('referrals/test-ref-1', { referrerId: 'test-cust-priya', refereeId: 'test-cust-rahul', side: 'customer', name: 'Rahul Mehta (test)', phone: '+919800000012', status: 'joined', invitedAt: now - 16 * D, joinedAt: now - 15 * D, reward: 100 });
-  w('referrals/test-ref-2', { referrerId: 'test-cust-priya', side: 'customer', name: 'Neha (test)', phone: '+919800000019', status: 'invited', invitedAt: now - 2 * D, reward: 100 });
+  w('config/referral', { active: true, customerReward: 50, signupReward: 5, partnerReward: 0, updatedAt: now });
+  w('referrals/test-ref-1', { referrerId: 'test-cust-priya', refereeId: 'test-cust-rahul', side: 'customer', name: 'Rahul Mehta (test)', phone: '+919800000012', status: 'joined', invitedAt: now - 16 * D, joinedAt: now - 15 * D, reward: 50, paid: 50 });
+  w('referrals/test-ref-2', { referrerId: 'test-cust-priya', side: 'customer', name: 'Neha (test)', phone: '+919800000019', status: 'invited', invitedAt: now - 2 * D, reward: 50, signupPaid: 5, paid: 5 });
 
   // People waiting outside our areas
   const waiting: [string, string, string, number, number, string][] = [

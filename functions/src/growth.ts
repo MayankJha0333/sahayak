@@ -4,7 +4,7 @@
  */
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { FIRST_COUPON, REFERRAL_REWARD } from './catalog';
+import { FIRST_COUPON, REFERRAL_REWARD, REFERRAL_SIGNUP_REWARD } from './catalog';
 import { coverageAt, pickArea, isServing } from './areaGeo';
 import { distanceM, type LatLng } from './geo';
 import { db, must, requireAdmin, uid, type Area } from './shared';
@@ -192,12 +192,64 @@ export async function countCouponUse(code?: string) {
 /* referral settings                                                   */
 /* ------------------------------------------------------------------ */
 
-export type ReferralConfig = { active: boolean; customerReward: number; partnerReward: number };
+/** customerReward is the total per friend; signupReward (part of it) is paid as soon as the friend signs up. */
+export type ReferralConfig = { active: boolean; customerReward: number; signupReward: number; partnerReward: number };
 
 export async function referralConfig(): Promise<ReferralConfig> {
   const d = (await db.collection('config').doc('referral').get()).data() as Partial<ReferralConfig> | undefined;
-  return { active: d?.active ?? true, customerReward: d?.customerReward ?? REFERRAL_REWARD, partnerReward: d?.partnerReward ?? REFERRAL_REWARD };
+  const total = Math.max(0, d?.customerReward ?? REFERRAL_REWARD);
+  return { active: d?.active ?? true, customerReward: total, signupReward: Math.min(total, Math.max(0, d?.signupReward ?? REFERRAL_SIGNUP_REWARD)), partnerReward: 0 };
 }
+
+/* ------------------------------------------------------------------ */
+/* customer referrals                                                  */
+/* ------------------------------------------------------------------ */
+
+const firstName = (n?: string) => String(n ?? '').trim().split(/\s+/)[0] || 'your friend';
+
+/** Finds whose code this is, and why it cannot be used (if it cannot). Customers only: experts do not refer. */
+async function lookupReferral(u: string, raw: string) {
+  const code = String(raw ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length < 4) return { error: 'Enter the code your friend shared.' } as const;
+  const cfg = await referralConfig();
+  if (!cfg.active) return { error: 'Referral rewards are paused right now.' } as const;
+  const hit = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+  const doc = hit.docs[0];
+  if (!doc || (doc.data() as { role?: string }).role !== 'customer') return { error: 'We could not find that code. Check it with your friend.' } as const;
+  if (doc.id === u) return { error: 'That is your own code — share it with friends instead.' } as const;
+  return { code, referrerId: doc.id, referrerName: firstName((doc.data() as { name?: string }).name), reward: cfg.customerReward, signupReward: cfg.signupReward } as const;
+}
+
+/** Sign-up screen: is this code real? Shows whose it is before she applies it. */
+export const checkReferralCode = onCall<{ code: string }>(async (r) => {
+  const res = await lookupReferral(uid(r), r.data.code);
+  if ('error' in res) throw new HttpsError('failed-precondition', res.error as string);
+  return { ok: true as const, referrerName: res.referrerName, reward: res.reward, signupReward: res.signupReward };
+});
+
+/**
+ * A new customer says who invited her. Only once, and only before her first booking.
+ * The friend's credit is added later, when she completes that first booking.
+ */
+export const applyReferral = onCall<{ code: string }>(async (r) => {
+  const u = uid(r);
+  const ref = db.collection('users').doc(u);
+  const me = (await ref.get()).data() as { role?: string; name?: string; phone?: string; referredBy?: string; firstBookingDone?: boolean } | undefined;
+  if (!me || me.role !== 'customer') throw new HttpsError('failed-precondition', 'Referral codes are for customer accounts.');
+  if (me.referredBy) throw new HttpsError('failed-precondition', 'You have already added a referral code.');
+  const booked = await db.collection('bookings').where('customerId', '==', u).where('paid', '==', true).limit(1).get();
+  if (me.firstBookingDone || !booked.empty) throw new HttpsError('failed-precondition', 'Referral codes work only before your first booking.');
+  const res = await lookupReferral(u, r.data.code);
+  if ('error' in res) throw new HttpsError('failed-precondition', res.error as string);
+  await ref.update({ referredBy: res.code });
+  // The friend who shared the code gets the small sign-up part now; the rest after this customer's first booking.
+  if (res.signupReward > 0) await db.collection('users').doc(res.referrerId).update({ rewards: FieldValue.increment(res.signupReward) });
+  await db.collection('referrals').doc(`${res.referrerId}_${u}`).set({
+    referrerId: res.referrerId, refereeId: u, side: 'customer', name: me.name ?? '', phone: me.phone ?? '',
+    status: 'invited', invitedAt: Date.now(), reward: res.reward, signupPaid: res.signupReward, paid: res.signupReward,
+  });
+  return { ok: true as const, referrerName: res.referrerName, reward: res.reward, signupReward: res.signupReward };
+});
 
 /** Ops can give a customer credit by hand (a goodwill gesture after a bad visit, say). */
 export const adminGiveCredit = onCall<{ userId: string; amount: number; note?: string }>(async (r) => {

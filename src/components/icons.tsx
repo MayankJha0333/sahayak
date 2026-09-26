@@ -40,6 +40,7 @@ export const CreditCard = feather('credit-card');
 export const Gift = feather('gift');
 export const Tag = feather('tag');
 export const Share2 = feather('share-2');
+export const UserPlus = feather('user-plus');
 export const LifeBuoy = feather('life-buoy');
 export const Wallet = feather('briefcase');
 export const Briefcase = feather('briefcase');
