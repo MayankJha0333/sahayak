@@ -186,7 +186,7 @@ countdown.
 
 ## 4 · How money moves
 
-**You pay for time, not per task.** 30 min ₹99 · 1 h ₹169 · 1.5 h ₹239 · 2 h ₹299 · 3 h ₹429
+**You pay for time, not per task.** **1 h ₹99** · 1.5 h ₹149 · 2 h ₹189 · 3 h ₹279 · extra time ₹2 a minute
 (`PRICE_BY_MIN` in `src/lib/mock.ts` and `functions/src/catalog.ts` — keep them identical).
 The tasks you tick are her checklist for that time; adding a task never adds to the bill.
 

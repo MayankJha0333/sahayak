@@ -105,7 +105,7 @@ export async function loadTestData() {
     [0, 'no_match', 'test-cust-anita'], [1, 'cancelled', 'test-cust-anita'],
   ];
   plan.forEach(([daysAgo, status, cust], i) => {
-    const id = `TEST${1000 + i}`, price = i % 2 ? 169 : 239, coupon = i === 2 || i === 5;
+    const id = `TEST${1000 + i}`, price = i % 2 ? 99 : 149, coupon = i === 2 || i === 5;
     const created = now - daysAgo * D - (i + 1) * H;
     w(`bookings/${id}`, {
       customerId: cust, tasks: ['Sweep and mop', 'Dishes'], durationMin: i % 2 ? 60 : 90, address: addr(i),

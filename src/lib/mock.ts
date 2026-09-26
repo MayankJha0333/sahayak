@@ -4,12 +4,14 @@ export type ServiceIcon =
   | 'cleaning-services' | 'local-dining' | 'kitchen' | 'bathtub' | 'local-laundry-service' | 'restaurant';
 
 /**
- * Pricing is by time, not by task. You book an expert for 30 minutes to 3 hours and she does
+ * Pricing is by time, not by task. You book an expert for 1 to 3 hours and she does
  * whatever is on your list in that time — sweep, dishes, bathroom, all of it. Same on the server.
  */
-export const DURATIONS = [30, 60, 90, 120, 180] as const;
-export const PRICE_BY_MIN: Record<number, number> = { 30: 99, 60: 169, 90: 239, 120: 299, 180: 429 };
-export const priceForMinutes = (mins: number) => PRICE_BY_MIN[mins] ?? Math.round((mins / 60) * 169);
+/** Shortest visit is 1 hour (₹99). Keep in step with functions/src/catalog.ts. */
+export const DURATIONS = [60, 90, 120, 180] as const;
+/** ₹99 an hour is the headline price; longer visits get a little cheaper per hour. Keep in step with functions/src/catalog.ts. */
+export const PRICE_BY_MIN: Record<number, number> = { 60: 99, 90: 149, 120: 189, 180: 279 };
+export const priceForMinutes = (mins: number) => PRICE_BY_MIN[mins] ?? Math.round((mins / 60) * 99);
 
 export type Service = {
   slug: string;
@@ -90,7 +92,7 @@ export const taskLines = (b: { tasks?: string[]; serviceSlug?: string; addonSlug
 export function priceFor(_s: Service, durationMin: number) { return priceForMinutes(durationMin); }
 
 export const VISIT_FEE = 0;
-export const OVERTIME_PER_MIN = 3;
+export const OVERTIME_PER_MIN = 2;
 export const LATE_CANCEL_FEE = 49;
 
 /** The expert keeps 62% of the booked time and of every extra minute, plus all tips. Mirrors expertPay() on the server. */

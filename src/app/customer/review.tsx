@@ -1,4 +1,4 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AppBar, Btn, Card, Eyebrow, Note, Screen, SplitRow, Tiny } from '@/components/ui';
@@ -10,7 +10,7 @@ import { useAllPartners } from '@/lib/db';
 import { usePay } from '@/lib/usePay';
 import { distanceM, km, travelEstimate } from '@/lib/geo';
 import { clock, inr, whenLabel } from '@/lib/format';
-import { OVERTIME_PER_MIN, priceForMinutes, serviceBySlug, tasksTitle } from '@/lib/mock';
+import { priceForMinutes, serviceBySlug, tasksTitle } from '@/lib/mock';
 import { useTheme } from '@/theme';
 import { NotServed } from '@/components/NotServed';
 import { useServiceArea } from '@/lib/areas';
@@ -108,6 +108,9 @@ export default function Review() {
     finally { setBusy(false); }
   };
 
+  // Outside every live area there is nothing to pay for: show the coming-soon page instead.
+  if (blocked) return <Redirect href="/customer/coming-soon" />;
+
   return (
     <View className="flex-1 bg-ground dark:bg-ground-dark">
       <AppBar title="Review" subtitle="Before you pay" back />
@@ -163,12 +166,9 @@ export default function Review() {
 
         {err && !blocked ? <Note tone="crit">{err}</Note> : null}
         {blocked && address ? (
-          <NotServed at={address.at} line={`${address.line1}, ${address.line2}`} city={address.line2.split(',').pop()?.trim()} onChangeAddress={() => router.push('/customer/address')} />
+          <NotServed at={address.at} line={[address.line1, address.line2].filter(Boolean).join(', ')} city={address.line2.split(',').pop()?.trim()} onChangeAddress={() => router.push('/customer/address')} />
         ) : null}
         {note ? <Note>{note}</Note> : null}
-        <Note tone="warn">
-          Need more time during the visit? Add 15, 30 or 60 minutes from the app at {inr(OVERTIME_PER_MIN)} a minute, paid when you add it.
-        </Note>
         <Text className="font-jk text-center text-[11px] text-ink3 dark:text-ink3-dark">UPI · cards · net banking, via Razorpay</Text>
       </Screen>
 

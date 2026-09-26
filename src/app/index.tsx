@@ -35,7 +35,7 @@ export default function Launcher() {
   if (user && profile?.role === 'partner') return <Redirect href="/partner" />;
 
   const apps: { role: 'customer' | 'partner'; art: ArtName; name: string; sub: string }[] = [
-    { role: 'customer', art: 'sweep-mop', name: 'I need help at home', sub: `Book an expert from ${inr(PRICE_BY_MIN[30])} · at your door in minutes` },
+    { role: 'customer', art: 'sweep-mop', name: 'I need help at home', sub: `Book an expert at ${inr(PRICE_BY_MIN[60])} an hour · at your door in minutes` },
     { role: 'partner', art: 'bolt', name: 'I am a house-help expert', sub: 'Get jobs near you · withdraw your pay any time' },
   ];
 

@@ -57,7 +57,7 @@ export default function Account() {
       <View className="gap-4 px-4 pt-4">
         <View className="flex-row gap-3">
           {tile(CalendarDays, 'My bookings', () => router.push('/customer/(tabs)/bookings'))}
-          {tile(CreditCard, 'Payments', () => router.push('/customer/(tabs)/bookings'), 'Razorpay')}
+          {tile(CreditCard, 'Payments', () => router.push('/customer/payments'))}
           {tile(Headphones, 'Help & support', () => router.push('/help'))}
         </View>
 
@@ -69,7 +69,7 @@ export default function Account() {
                 <MapPin size={17} color={a.id === profile.defaultAddressId ? c.onBrand : c.ink2} />
               </View>
               <View className="flex-1">
-                <H>{a.label} · {a.line1}</H>
+                <H>{a.line1 ? `${a.label} · ${a.line1}` : a.label}</H>
                 <Tiny>{a.line2}</Tiny>
               </View>
               <Pressable hitSlop={8} accessibilityRole="button" accessibilityLabel={`Edit ${a.label}`} onPress={() => router.push({ pathname: '/customer/address', params: { id: a.id } })}>

@@ -38,7 +38,9 @@ export default function BookScreen() {
   // `slug` may be one task or a comma list (quick rebook passes the last visit's list).
   const initialTasks = slug && slug !== 'any' ? String(slug).split(',').filter((t) => SERVICES.some((x) => x.slug === t)) : ['sweep-mop'];
   const [tasks, setTasks] = useState<string[]>(initialTasks);
-  const [duration, setDuration] = useState<number>(() => suggestMinutes(initialTasks));
+  const [picked, setDuration] = useState<number>(() => suggestMinutes(initialTasks));
+  // Never below the shortest visit we sell (1 hour), even if an older value is still in memory.
+  const duration = (DURATIONS as readonly number[]).includes(picked) ? picked : DURATIONS[0];
   const [touchedDuration, setTouchedDuration] = useState(false);
   const [dayIdx, setDayIdx] = useState(mode === 'later' ? 1 : -1); // -1 = now
   const [period, setPeriod] = useState(0);
@@ -186,7 +188,7 @@ export default function BookScreen() {
             <Text className="font-jkb text-[13px] text-brand dark:text-brand-dark">Add</Text>
           </Pressable>
         ) : outside ? (
-          <NotServed at={address.at} line={`${address.line1}, ${address.line2}`} city={address.line2.split(',').pop()?.trim()} />
+          <NotServed at={address.at} line={[address.line1, address.line2].filter(Boolean).join(', ')} city={address.line2.split(',').pop()?.trim()} />
         ) : !later ? (
           <View className="flex-row items-start gap-3 rounded-2xl bg-lavender px-4 py-3.5">
             <Info size={18} color={c.ink} style={{ marginTop: 2 }} />
@@ -204,14 +206,14 @@ export default function BookScreen() {
               return (
                 <Pressable key={d} accessibilityRole="button" onPress={() => { setDuration(d); setTouchedDuration(true); }}
                   className={`w-[96px] items-center rounded-2xl border py-3.5 ${on ? 'border-brand bg-brand-soft dark:border-brand-dark dark:bg-brand-softdark' : 'border-line bg-paper dark:border-line-dark dark:bg-paper-dark'}`}>
-                  <Text className="font-jkb text-[19px] text-ink dark:text-ink-dark">{d >= 60 ? `${d / 60} hr` : `0.5 hr`}</Text>
+                  <Text className="font-jkb text-[19px] text-ink dark:text-ink-dark">{`${d / 60} hr`}</Text>
                   <Text className="font-jkm text-[15px] text-ink dark:text-ink-dark">{inr(priceForMinutes(d))}</Text>
                   {d === suggested ? <Text className="mt-1 font-jkx text-[9px] uppercase tracking-[0.8px] text-brand dark:text-brand-dark">fits your list</Text> : null}
                 </Pressable>
               );
             })}
           </ScrollView>
-          <Tiny>Your list usually takes about {needMin} min{duration < needMin ? ' — shorter than that and she may not finish everything' : ''}. Extra time is {inr(3)} a minute, paid at the end.</Tiny>
+          <Tiny>Your list usually takes about {needMin} min{duration < needMin ? ' — shorter than that and she may not finish everything' : ''}.</Tiny>
 
           {later ? (
             <>

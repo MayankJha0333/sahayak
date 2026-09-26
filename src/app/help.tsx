@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Keyboard, Text, TextInput, View } from 'react-native';
 import { Send } from '@/components/icons';
-import { AppBar, Badge, Btn, Card, Chip, Divider, Eyebrow, Note, Screen, Tiny } from '@/components/ui';
+import { AppBar, Btn, Card, Chip, Eyebrow, Note, Screen, Tiny } from '@/components/ui';
 import { addFeedback } from '@/lib/api';
-import { useMyBookings, useMyFeedback, usePartnerBookings } from '@/lib/db';
+import { useMyBookings, usePartnerBookings } from '@/lib/db';
 import { useAuth } from '@/lib/auth';
 import { clock } from '@/lib/format';
 import { bookingTitle } from '@/lib/mock';
@@ -18,7 +18,6 @@ const KINDS: { id: FeedbackDoc['kind']; label: string; hint: string }[] = [
 
 export default function Help() {
   const { c } = useTheme();
-  const { rows: feedback } = useMyFeedback();
   const { partner } = useAuth();
   const { rows: asCustomer } = useMyBookings();
   const { rows: asPartner } = usePartnerBookings();
@@ -41,7 +40,7 @@ export default function Help() {
         new Promise<false>((done) => setTimeout(() => done(false), 12_000)),
       ]);
       if (!ok) { setErr('Could not reach Sahayak. Check your internet and try again.'); return; }
-      setText(''); setSent(true); setTimeout(() => setSent(false), 2500);
+      setText(''); setSent(true);
     } catch (e) { setErr((e as Error).message || 'Could not send. Please try again.'); }
     finally { setBusy(false); }
   };
@@ -54,7 +53,7 @@ export default function Help() {
         <View className="flex-row flex-wrap gap-2">{KINDS.map((k) => <Chip key={k.id} label={k.label} on={kind === k.id} onPress={() => setKind(k.id)} />)}</View>
         <Card>
           <Eyebrow>{KINDS.find((k) => k.id === kind)!.hint}</Eyebrow>
-          <TextInput value={text} onChangeText={setText} multiline textAlignVertical="top"
+          <TextInput value={text} onChangeText={(t) => { setText(t); if (sent) setSent(false); }} multiline textAlignVertical="top"
             placeholder={kind === 'request' ? 'e.g. Let me pick the same expert every time' : 'Write as much or as little as you like'}
             placeholderTextColor={c.ink3} accessibilityLabel="Your message"
             className="font-jk min-h-[120px] rounded-2xl bg-sunk px-4 py-3.5 text-[14.5px] leading-5 text-ink dark:bg-sunk-dark dark:text-ink-dark" />
@@ -68,27 +67,12 @@ export default function Help() {
             </View>
           ) : null}
           {err ? <Note tone="crit">{err}</Note> : null}
-          <Btn title={sent ? 'Sent — thank you' : 'Send'} busy={busy} disabled={text.trim().length < 3} tone={sent ? 'secondary' : 'primary'}
-            icon={sent ? undefined : <Send size={16} color={c.onBrand} />} onPress={submit} />
+          <Btn title="Send" busy={busy} disabled={text.trim().length < 3}
+            icon={<Send size={16} color={c.onBrand} />} onPress={submit} />
         </Card>
-        {feedback.length ? (
-          <Card>
-            <Eyebrow>You have sent</Eyebrow>
-            {feedback.map((f, i) => (
-              <View key={f.id}>
-                {i ? <Divider /> : null}
-                <View className="gap-1.5 py-2.5">
-                  <View className="flex-row items-center gap-2">
-                    <Badge tone={f.kind === 'problem' ? 'crit' : f.kind === 'request' ? 'brand' : 'neutral'} label={f.auto ? 'your rating' : f.kind} />
-                    <Tiny>{clock(f.at)}{f.bookingId ? ` · ${f.bookingId}` : ''}</Tiny>
-                  </View>
-                  <Text className="font-jk text-[13.5px] leading-5 text-ink2 dark:text-ink2-dark">{f.text}</Text>
-                </View>
-              </View>
-            ))}
-          </Card>
-        ) : null}
-        <Note>Our team reads every message. Problems about a booking are answered first — usually the same day.</Note>
+        {sent
+          ? <Note tone="ok">Thank you — we got your message. We reply on your phone, usually the same day.</Note>
+          : <Note>Our team reads every message. Problems about a booking are answered first — usually the same day.</Note>}
       </Screen>
     </View>
   );

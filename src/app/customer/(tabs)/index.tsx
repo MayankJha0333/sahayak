@@ -62,7 +62,7 @@ export default function CustomerHome() {
               <Text className="font-jkx text-[26px] text-white">{address?.label ?? 'Add address'}</Text>
               <ChevronDown size={20} color="#FFFFFF" />
             </View>
-            <Text className="font-jkm text-[15px] text-white/90" numberOfLines={1}>{address ? `${address.line1}, ${address.line2}` : 'Tap to set your address on the map'}</Text>
+            <Text className="font-jkm text-[15px] text-white/90" numberOfLines={1}>{address ? [address.line1, address.line2].filter(Boolean).join(', ') : 'Tap to set your address on the map'}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Account" onPress={() => router.push('/customer/(tabs)/account')}
             className="h-14 w-14 items-center justify-center rounded-full bg-white">
@@ -74,12 +74,12 @@ export default function CustomerHome() {
           <Text className="font-jkb text-[31px] leading-[38px] text-white" style={{ flex: 1.55 }}>One expert,{'\n'}every household{'\n'}chore</Text>
           <View style={{ flex: 1, alignItems: 'flex-end' }}><Art name="sweep-mop" size={128} /></View>
         </View>
-        <Text className="mt-1 font-jkm text-[14px] text-white/90">From {inr(PRICE_BY_MIN[30])} for 30 min · pay for her time, not per task</Text>
+        <Text className="mt-1 font-jkm text-[14px] text-white/90">{inr(PRICE_BY_MIN[60])} an hour · pay for her time, not per task</Text>
 
         {/* Outside every live area: no booking buttons, just the honest answer and the waitlist. */}
         {outside && address ? (
           <View className="mt-6">
-            <NotServed at={address.at} line={`${address.line1}, ${address.line2}`} city={address.line2.split(',').pop()?.trim()} onChangeAddress={() => router.push('/customer/address')} onMore={() => router.push('/customer/coming-soon')} />
+            <NotServed at={address.at} line={[address.line1, address.line2].filter(Boolean).join(', ')} city={address.line2.split(',').pop()?.trim()} onChangeAddress={() => router.push('/customer/address')} onMore={() => router.push('/customer/coming-soon')} />
           </View>
         ) : (
           <View className="mt-6 flex-row gap-3">

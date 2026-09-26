@@ -34,7 +34,7 @@ export function ComingSoonView({ addressId, tab }: { addressId?: string; tab?: b
   const { coverage, loading } = useServiceArea();
   // A just-saved address is passed in; otherwise the one bookings use.
   const address = profile?.addresses.find((a) => a.id === (addressId ?? profile.defaultAddressId)) ?? profile?.addresses[0];
-  const line = address ? `${address.line1}, ${address.line2}` : '';
+  const line = address ? [address.line1, address.line2].filter(Boolean).join(', ') : '';
   // The town or city from the address ("…, Sector 52, Gurugram" → "Gurugram") reads better in a headline than the street.
   const locality = address?.line2.split(',').map((p) => p.trim()).filter(Boolean).pop() || 'your area';
   const wl = useWaitlistJoin(address?.at ?? { lat: 0, lng: 0 }, line, address?.line2.split(',').pop()?.trim());
@@ -80,8 +80,8 @@ export function ComingSoonView({ addressId, tab }: { addressId?: string; tab?: b
   const share = async () => {
     const msg = [
       opensAt
-        ? `Sahayak is starting house help in ${place} on ${longDate(opensAt)} — verified experts at your door in minutes, from ${inr(PRICE_BY_MIN[30])} for 30 min.`
-        : `I just joined the Sahayak waitlist for ${place} — verified house help at your door in minutes, from ${inr(PRICE_BY_MIN[30])} for 30 min.`,
+        ? `Sahayak is starting house help in ${place} on ${longDate(opensAt)} — verified experts at your door in minutes, ${inr(PRICE_BY_MIN[60])} an hour.`
+        : `I just joined the Sahayak waitlist for ${place} — verified house help at your door in minutes, ${inr(PRICE_BY_MIN[60])} an hour.`,
       'Join the waitlist too: the more of us from here, the sooner they start.',
       profile?.referralCode ? `Use my code ${profile.referralCode} when you sign up.` : '',
       LINK,
@@ -173,7 +173,7 @@ export function ComingSoonView({ addressId, tab }: { addressId?: string; tab?: b
             <Text className="font-jkb text-[17px] text-ink dark:text-ink-dark">When we start in {place}</Text>
             {[
               { Icon: Zap, title: 'An expert at your door in about 10 minutes', sub: 'Or book a slot for later — morning, afternoon or evening.' },
-              { Icon: Clock, title: `From ${inr(PRICE_BY_MIN[30])} for 30 minutes`, sub: 'Pay for her time, not per task. Sweeping, dishes, kitchen, bathrooms, laundry.' },
+              { Icon: Clock, title: `${inr(PRICE_BY_MIN[60])} for a full hour`, sub: 'Pay for her time, not per task. Sweeping, dishes, kitchen, bathrooms, laundry.' },
               { Icon: ShieldCheck, title: 'ID-verified, trained and insured', sub: 'Every expert’s Aadhaar is checked before her first job.' },
             ].map(({ Icon, title, sub }) => (
               <View key={title} className="flex-row gap-3">

@@ -10,7 +10,6 @@ import { BrandPanel } from '@/components/BrandPanel';
 import { RecaptchaGate, type PhoneVerifier } from '@/components/RecaptchaGate';
 import { Btn, Note, Tiny } from '@/components/ui';
 import { useAuth, type PhoneConfirmation } from '@/lib/auth';
-import { emulatorOtp } from '@/lib/fb/auth';
 import { useNativeSdk } from '@/lib/fb/runtime';
 import { USE_EMULATORS } from '@/lib/firebase';
 import { clearReferral, pendingReferral } from '@/lib/referral';
@@ -41,7 +40,6 @@ export default function Login() {
   const [resendLeft, setResendLeft] = useState(0);
   const [confirmation, setConfirmation] = useState<PhoneConfirmation | null>(null);
   const [kb, setKb] = useState(false);
-  const [emuCode, setEmuCode] = useState('');
 
   // The hero folds up while the keyboard is open so the field and the button both stay in view.
   useEffect(() => {
@@ -92,11 +90,6 @@ export default function Login() {
     setResendLeft(RESEND_SECONDS);
     setStep('otp');
     setTimeout(() => otpInput.current?.focus(), 350);
-    if (USE_EMULATORS) {
-      // Local emulator: no SMS exists, so show the code it generated.
-      const code = await emulatorOtp(e164);
-      if (code) setEmuCode(code);
-    }
   });
 
   const afterVerified = async () => {
@@ -203,7 +196,6 @@ export default function Login() {
               <OtpStep
                 pretty={pretty} otp={otp} onChange={onOtpChange} inputRef={otpInput} busy={busy} err={err}
                 resendLeft={resendLeft} onResend={sendOtp} onChangeNumber={changeNumber} onSubmit={() => verify()} c={c}
-                hint={emuCode ? `Emulator OTP: ${emuCode}` : __DEV__ && digits === '9999999999' ? 'Test number · OTP 123456' : ''}
               />
             ) : (
               <NameStep
@@ -281,7 +273,6 @@ function PhoneStep({ digits, onChange, onSubmit, busy, err, role, c }: {
 
       {err ? <Note tone="crit">{err}</Note> : null}
       {!err && digits.length === 10 && !ok ? <Note tone="crit">Indian mobile numbers start with 6, 7, 8 or 9.</Note> : null}
-      {!err && digits.length > 0 && digits.length < 10 ? <Tiny>{10 - digits.length} more digit{10 - digits.length === 1 ? '' : 's'}</Tiny> : null}
 
       <Tiny className="text-center">
         By continuing you agree to our{' '}

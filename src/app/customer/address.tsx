@@ -32,13 +32,20 @@ export default function AddressScreen() {
   // Outside every live area: the main button becomes "Join the waitlist"; saving is still possible for later.
   const outside = !areasLoading && !served(at);
   const wl = useWaitlistJoin(at, [line1.trim(), line2.trim()].filter(Boolean).join(', '), line2.split(',').pop()?.trim());
-  const ok = line1.trim().length > 1 && line2.trim().length > 2;
+  // An address we serve needs the flat number (the expert rides there). One we don't serve yet only needs the area.
+  const hasArea = line2.trim().length > 2;
+  const hasFlat = line1.trim().length > 1;
+  const ok = hasArea && (outside || hasFlat);
+  const [tried, setTried] = useState(false);
 
   const save = async () => {
+    setTried(true);
+    if (!ok) return;
     setBusy(true); setErr('');
     try {
       const id = existing?.id ?? `a${Date.now().toString(36)}`;
-      await saveAddress({ id, label, line1: line1.trim(), line2: line2.trim(), directions: directions.trim(), at }, !existing && !profile?.addresses.length);
+      // A new address becomes the one the app uses, so Home shows the right thing (bookings, or "coming soon").
+      await saveAddress({ id, label, line1: line1.trim(), line2: line2.trim(), directions: directions.trim(), at }, !existing);
       // Not served yet: show the full coming-soon page for this address instead of dropping her back home.
       if (outside) router.replace({ pathname: '/customer/coming-soon', params: { id } });
       else router.back();
@@ -56,8 +63,12 @@ export default function AddressScreen() {
       <AppBar title={existing ? 'Edit address' : 'Where should she come?'} subtitle="Drop the pin on your gate" back />
       <Screen footer={(
         <>
-          <Btn title={existing ? 'Save address' : outside ? 'Save address' : 'Save and use this address'} busy={busy} disabled={!ok} onPress={save} />
-          {!ok ? <Text className="font-jk text-center text-[12px] text-ink3 dark:text-ink3-dark">Add your flat / house number and area to save</Text> : null}
+          {tried && !ok ? (
+            <Text className="font-jkm text-center text-[12.5px] text-crit dark:text-crit-dark">
+              {!hasArea ? 'Add the building and area to save' : 'Add your flat / house number to save'}
+            </Text>
+          ) : null}
+          <Btn title={existing || outside ? 'Save address' : 'Save and use this address'} busy={busy} onPress={save} />
         </>
       )}>
         <MapPicker value={at} onChange={(p, place) => { setAt(p);  if (place && !existing) setLine2(place); }} height={300} />
@@ -71,7 +82,7 @@ export default function AddressScreen() {
         <Card>
           <Eyebrow>Save as</Eyebrow>
           <View className="flex-row flex-wrap gap-2">{LABELS.map((l) => <Chip key={l} label={l} on={label === l} onPress={() => setLabel(l)} />)}</View>
-          <Eyebrow>Flat / house number</Eyebrow>
+          <Eyebrow>{outside ? 'Flat / house number (optional for now)' : 'Flat / house number'}</Eyebrow>
           {field({ value: line1, onChangeText: setLine1, placeholder: 'B-1204, Tower B', accessibilityLabel: 'Flat or house number' })}
           <Eyebrow>Building and area</Eyebrow>
           {field({ value: line2, onChangeText: setLine2, placeholder: 'Palm Grove Residency, Sector 52', accessibilityLabel: 'Building and area' })}

@@ -16,7 +16,7 @@ const PAGES: Record<string, { title: string; sections: [string, string][] }> = {
     title: 'Terms of service',
     sections: [
       ['Booking', 'A booking reserves an expert for the time you choose. The clock starts when you share the start code with her, never while she is on the way.'],
-      ['Payment', 'You pay for the booked time when you book. Extra time is charged at ₹3 a minute at the end of the visit. All payments go through Razorpay; we never store card details.'],
+      ['Payment', 'You pay for the booked time when you book. Extra time is charged at ₹2 a minute at the end of the visit. All payments go through Razorpay; we never store card details.'],
       ['Cancellation', 'Cancel free while we are still finding an expert, and for 2 minutes after one accepts. Scheduled visits are free to cancel up to 2 hours before the slot. After that a ₹49 fee applies and the rest is refunded to the original payment method within 5–7 working days.'],
       ['Conduct', 'Experts may decline unsafe work, work needing a ladder, or anything outside the task list. Please treat them with respect; abusive behaviour ends the visit without refund.'],
     ],

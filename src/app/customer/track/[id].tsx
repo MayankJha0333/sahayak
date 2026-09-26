@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Linking, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, Text, View, ActivityIndicator } from 'react-native';
 import { Phone, ShieldCheck } from '@/components/icons';
 import { TrackingMap } from '@/components/TrackingMap';
 import { AppBar, Avatar, Badge, Btn, Card, Eyebrow, H, Note, Progress, Screen, SplitRow, Tiny } from '@/components/ui';
@@ -105,16 +105,28 @@ export default function Track() {
         footer={
           b.status === 'in_progress' ? (
             <>
-              <Text className="font-jkb text-[13px] text-ink dark:text-ink-dark">{timeUp ? 'Paid time is up — add time to keep her' : 'Need more time? Add it now'}</Text>
-              <View className="flex-row gap-2">
-                {[15, 30, 60].map((m) => (
-                  <View key={m} className="flex-1">
-                    <Btn title={`+${m} · ${inr(m * OVERTIME_PER_MIN)}`} accessibilityLabel={`Add ${m} minutes for ${inr(m * OVERTIME_PER_MIN)}`} tone={timeUp || leftSecs < 300 ? 'primary' : 'secondary'} size="sm"
-                      busy={busy === `x${m}`} disabled={Boolean(busy) && busy !== `x${m}`} onPress={() => extend(m)} />
-                  </View>
-                ))}
+              <View className="flex-row items-baseline justify-between">
+                <Text className={`font-jkb text-[15px] ${timeUp ? 'text-crit dark:text-crit-dark' : 'text-ink dark:text-ink-dark'}`}>{timeUp ? 'Time is up — add more?' : 'Add more time'}</Text>
+                <Tiny>{inr(OVERTIME_PER_MIN)} a minute</Tiny>
               </View>
-              <Tiny>Minutes · paid through Razorpay when you add them · the timer updates on both phones</Tiny>
+              <View className="flex-row gap-2">
+                {[15, 30, 60].map((m) => {
+                  const urgent = timeUp || leftSecs < 300;
+                  const going = busy === `x${m}`;
+                  return (
+                    <Pressable key={m} accessibilityRole="button" accessibilityLabel={`Add ${m} minutes for ${inr(m * OVERTIME_PER_MIN)}`}
+                      disabled={Boolean(busy)} onPress={() => extend(m)}
+                      className={`flex-1 items-center rounded-2xl border-[1.5px] py-2.5 active:opacity-80 ${urgent ? 'border-brand bg-brand dark:border-brand-dark dark:bg-brand-dark' : 'border-line bg-paper dark:border-line-dark dark:bg-paper-dark'} ${busy && !going ? 'opacity-40' : ''}`}>
+                      {going ? <ActivityIndicator size="small" color={urgent ? c.onBrand : c.brand} style={{ height: 38 }} /> : (
+                        <>
+                          <Text className={`font-jkx text-[16px] ${urgent ? 'text-onbrand' : 'text-ink dark:text-ink-dark'}`}>+{m} min</Text>
+                          <Text className={`font-jkm text-[12.5px] ${urgent ? 'text-onbrand' : 'text-ink2 dark:text-ink2-dark'}`}>{inr(m * OVERTIME_PER_MIN)}</Text>
+                        </>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </>
           ) : b.status === 'arrived' ? (
             bot
