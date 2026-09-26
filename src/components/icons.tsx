@@ -38,6 +38,8 @@ export const CalendarDays = feather('calendar');
 export const RotateCcw = feather('rotate-ccw');
 export const CreditCard = feather('credit-card');
 export const Gift = feather('gift');
+export const Tag = feather('tag');
+export const Share2 = feather('share-2');
 export const LifeBuoy = feather('life-buoy');
 export const Wallet = feather('briefcase');
 export const Briefcase = feather('briefcase');
@@ -60,6 +62,9 @@ export const Clock = feather('clock');
 export const Plus = feather('plus');
 export const Sparkles = feather('star');
 export const Lock = feather('lock');
+export const Camera = feather('camera');
+export const ImageIcon = feather('image');
+export const Upload = feather('upload');
 
 export function IndianRupee({ size = 20, color = light.ink2, style }: IconProps) {
   return <MaterialIcons name="currency-rupee" size={size} color={color} style={style} />;

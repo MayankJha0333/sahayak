@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Home, User } from './icons';
+import { WebMap, webMaps } from './WebMap';
 import type { LatLng } from '@/lib/geo';
 import { useTheme } from '@/theme';
 
@@ -26,28 +27,32 @@ export function OpsMap({ partners, jobs, center, height = 300 }: Props) {
   return (
     <View style={{ gap: 8 }}>
       <View style={{ height, borderRadius: 20, overflow: 'hidden' }}>
-        <MapView ref={map} style={{ flex: 1 }} initialRegion={{ ...toRN(center), latitudeDelta: 0.08, longitudeDelta: 0.08 }}
-          showsCompass={false} toolbarEnabled={false} pitchEnabled={false} rotateEnabled={false}>
-          {jobs.map((j) => (j.partnerAt && j.state === 'riding' ? (
-            <Polyline key={`r-${j.id}`} coordinates={[toRN(j.partnerAt), toRN(j.at)]} strokeColor={c.brand} strokeWidth={3} lineDashPattern={[6, 6]} />
-          ) : null))}
-          {jobs.map((j) => (
-            <Marker key={`j-${j.id}`} coordinate={toRN(j.at)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} title={j.id}
-              description={j.state === 'matching' ? 'Looking for an expert' : j.state === 'riding' ? 'Expert on the way' : 'Expert at work'}>
-              <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: j.state === 'matching' ? c.warn : c.hero, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFFFFF' }}>
-                <Home size={13} color="#FFFFFF" />
-              </View>
-            </Marker>
-          ))}
-          {partners.map((p) => (
-            <Marker key={`p-${p.id}`} coordinate={toRN(p.at)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} title={p.name}
-              description={p.state === 'free' ? 'Online, free' : p.state === 'busy' ? 'On a job' : 'Offline'}>
-              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: tone[p.state] }}>
-                <User size={12} color={tone[p.state]} />
-              </View>
-            </Marker>
-          ))}
-        </MapView>
+        {webMaps ? (
+          <WebMap view={points.length > 1 ? { fit: points, pad: 40, maxZoom: 15 } : { center, zoom: 12 }} lines={jobs.filter((j) => j.partnerAt && j.state === 'riding').map((j) => ({ points: [j.partnerAt!, j.at], color: c.brand, width: 3, dashed: true }))} markers={[...jobs.map((j) => ({ id: `j-${j.id}`, at: j.at, bg: j.state === 'matching' ? c.warn : c.hero, border: '#FFFFFF', icon: 'home' as const, size: 30, title: j.id, sub: j.state === 'matching' ? 'Looking for an expert' : j.state === 'riding' ? 'Expert on the way' : 'Expert at work' })), ...partners.map((p) => ({ id: `p-${p.id}`, at: p.at, bg: '#FFFFFF', border: tone[p.state], icon: 'user' as const, fg: tone[p.state], size: 24, title: p.name, sub: p.state === 'free' ? 'Online, free' : p.state === 'busy' ? 'On a job' : 'Offline' }))]} />
+        ) : (
+          <MapView ref={map} style={{ flex: 1 }} initialRegion={{ ...toRN(center), latitudeDelta: 0.08, longitudeDelta: 0.08 }}
+            showsCompass={false} toolbarEnabled={false} pitchEnabled={false} rotateEnabled={false}>
+            {jobs.map((j) => (j.partnerAt && j.state === 'riding' ? (
+              <Polyline key={`r-${j.id}`} coordinates={[toRN(j.partnerAt), toRN(j.at)]} strokeColor={c.brand} strokeWidth={3} lineDashPattern={[6, 6]} />
+            ) : null))}
+            {jobs.map((j) => (
+              <Marker key={`j-${j.id}`} coordinate={toRN(j.at)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} title={j.id}
+                description={j.state === 'matching' ? 'Looking for an expert' : j.state === 'riding' ? 'Expert on the way' : 'Expert at work'}>
+                <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: j.state === 'matching' ? c.warn : c.hero, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFFFFF' }}>
+                  <Home size={13} color="#FFFFFF" />
+                </View>
+              </Marker>
+            ))}
+            {partners.map((p) => (
+              <Marker key={`p-${p.id}`} coordinate={toRN(p.at)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} title={p.name}
+                description={p.state === 'free' ? 'Online, free' : p.state === 'busy' ? 'On a job' : 'Offline'}>
+                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: tone[p.state] }}>
+                  <User size={12} color={tone[p.state]} />
+                </View>
+              </Marker>
+            ))}
+          </MapView>
+        )}
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
         {[

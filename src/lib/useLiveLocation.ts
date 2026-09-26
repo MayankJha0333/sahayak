@@ -2,11 +2,8 @@ import * as Location from 'expo-location';
 import { useEffect, useRef } from 'react';
 import { updatePartnerLocation } from './api';
 import { distanceM } from './geo';
-import { HOME } from './mock';
+import { inIndia } from './areas';
 
-/** Gurugram for now. Positions outside it are not shared: dispatch would never match them anyway. */
-export const SERVICE_RADIUS_M = 40_000;
-export const inServiceArea = (at: { lat: number; lng: number }) => distanceM(at, HOME) <= SERVICE_RADIUS_M;
 
 /**
  * While a partner is online, her phone's position is written to partners/{uid}.at so
@@ -26,7 +23,8 @@ export function useLiveLocation(enabled: boolean) {
         { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 20 },
         (pos) => {
           const at = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          if (!inServiceArea(at)) return;
+          // Outside India (a simulator's default spot, say) is never a real position for dispatch.
+          if (!inIndia(at)) return;
           if (last.current && distanceM(last.current, at) < 15) return;
           last.current = at;
           void updatePartnerLocation(at);

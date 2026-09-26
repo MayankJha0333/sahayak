@@ -22,6 +22,8 @@
     "expo-glass-effect": "~57.0.3",
     "expo-haptics": "^57.0.3",
     "expo-image": "~57.0.5",
+    "expo-image-manipulator": "~57.0.20",
+    "expo-image-picker": "~57.0.20",
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.10",
     "expo-location": "^57.0.19",
@@ -79,7 +81,11 @@
     "firebase:deploy": "npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes,functions",
     "functions:build": "npm --prefix functions run build",
     "functions:typecheck": "npm --prefix functions run typecheck",
-    "test:customer": "maestro test .maestro/customer"
+    "test:customer": "maestro test .maestro/customer",
+    "admin:dev": "npm --prefix admin-web run dev",
+    "admin:dev:lan": "npm --prefix admin-web run dev -- --host",
+    "admin:build": "npm --prefix admin-web run build",
+    "admin:deploy": "npm --prefix admin-web run build && npx -y firebase-tools@latest deploy --only hosting"
   },
   "private": true
 }

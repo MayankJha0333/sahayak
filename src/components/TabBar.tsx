@@ -12,6 +12,8 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       {state.routes.map((route, i) => {
         const on = state.index === i;
         const { options } = descriptors[route.key];
+        // A tab switched off for now (e.g. Bookings where we do not serve yet).
+        if ((options.tabBarItemStyle as { display?: string } | undefined)?.display === 'none') return null;
         const label = typeof options.title === 'string' ? options.title : route.name;
         const Icon = options.tabBarIcon;
         return (

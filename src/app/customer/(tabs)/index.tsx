@@ -1,12 +1,15 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Art, type ArtName } from '@/components/Art';
 import { BrandPanel } from '@/components/BrandPanel';
+import { ComingSoonView } from '@/components/ComingSoon';
+import { NotServed } from '@/components/NotServed';
 import { ChevronDown, ChevronRight, Plus, User } from '@/components/icons';
 import { Badge, Btn, Card, H, Progress, Tiny, shadow } from '@/components/ui';
 import { seedDemo } from '@/lib/api';
+import { useServiceArea } from '@/lib/areas';
 import { USE_EMULATORS } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth';
 import { useAllPartners, useLiveBooking, useMyBookings } from '@/lib/db';
@@ -37,8 +40,14 @@ export default function CustomerHome() {
   const open = isOpenAt(Date.now());
   const lastDone = bookings.find((b) => b.status === 'completed');
   const [seeding, setSeeding] = useState(false);
+  const { served, loading: areasLoading } = useServiceArea();
+  const outside = Boolean(address) && !areasLoading && !served(address!.at);
   // Once the coral header scrolls away, a plain strip keeps the clock and battery readable.
   const [scrolled, setScrolled] = useState(false);
+
+  // Her address is outside every live area: the whole Home tab becomes the coming-soon page, no booking buttons.
+  if (address && areasLoading) return <View className="flex-1 items-center justify-center bg-paper dark:bg-paper-dark"><ActivityIndicator color={c.brand} /></View>;
+  if (outside) return <ComingSoonView tab />;
 
   return (
     <View className="flex-1 bg-paper dark:bg-paper-dark">
@@ -67,23 +76,30 @@ export default function CustomerHome() {
         </View>
         <Text className="mt-1 font-jkm text-[14px] text-white/90">From {inr(PRICE_BY_MIN[30])} for 30 min · pay for her time, not per task</Text>
 
-        <View className="mt-6 flex-row gap-3">
-          <Pressable accessibilityRole="button"
-            // One instant visit at a time: if an expert is already booked for now, take her to that visit.
-            onPress={() => router.push(instantLive ? (instantLive.status === 'matching' ? `/customer/matching/${instantLive.id}` : `/customer/track/${instantLive.id}`)
-              : open ? '/customer/book/any' : { pathname: '/customer/book/[slug]', params: { slug: 'any', mode: 'later' } })}
-            className="flex-1 rounded-[24px] bg-paper p-5 active:opacity-90 dark:bg-paper-dark" style={{ minHeight: 210 }}>
-            <Text className="font-jkb text-[22px] leading-[28px] text-ink dark:text-ink-dark">Get instant{'\n'}service</Text>
-            <Text className="mt-1 font-jkm text-[12.5px] text-ink3 dark:text-ink3-dark">{instantLive ? 'You have a visit running — tap to track' : !open ? 'Opens at 8 AM · book a slot' : eta ? `Expert in ~${eta} min` : 'Nearest expert online'}</Text>
-            <View className="mt-auto self-end"><Art name="bolt" size={82} /></View>
-          </Pressable>
-          <Pressable onPress={() => router.push({ pathname: '/customer/book/[slug]', params: { slug: 'any', mode: 'later' } })} accessibilityRole="button"
-            className="flex-1 rounded-[24px] bg-paper p-5 active:opacity-90 dark:bg-paper-dark" style={{ minHeight: 210 }}>
-            <Text className="font-jkb text-[22px] leading-[28px] text-ink dark:text-ink-dark">Schedule{'\n'}for later</Text>
-            <View className="mt-3 flex-row"><View className="rounded-full border border-brand px-3 py-1.5"><Text className="font-jkb text-[13px] text-brand dark:text-brand-dark">Pick a slot</Text></View></View>
-            <View className="mt-auto self-end"><Art name="calendar" size={82} /></View>
-          </Pressable>
-        </View>
+        {/* Outside every live area: no booking buttons, just the honest answer and the waitlist. */}
+        {outside && address ? (
+          <View className="mt-6">
+            <NotServed at={address.at} line={`${address.line1}, ${address.line2}`} city={address.line2.split(',').pop()?.trim()} onChangeAddress={() => router.push('/customer/address')} onMore={() => router.push('/customer/coming-soon')} />
+          </View>
+        ) : (
+          <View className="mt-6 flex-row gap-3">
+            <Pressable accessibilityRole="button"
+              // One instant visit at a time: if an expert is already booked for now, take her to that visit.
+              onPress={() => router.push(instantLive ? (instantLive.status === 'matching' ? `/customer/matching/${instantLive.id}` : `/customer/track/${instantLive.id}`)
+                : open ? '/customer/book/any' : { pathname: '/customer/book/[slug]', params: { slug: 'any', mode: 'later' } })}
+              className="flex-1 rounded-[24px] bg-paper p-5 active:opacity-90 dark:bg-paper-dark" style={{ minHeight: 210 }}>
+              <Text className="font-jkb text-[22px] leading-[28px] text-ink dark:text-ink-dark">Get instant{'\n'}service</Text>
+              <Text className="mt-1 font-jkm text-[12.5px] text-ink3 dark:text-ink3-dark">{instantLive ? 'You have a visit running — tap to track' : !open ? 'Opens at 8 AM · book a slot' : eta ? `Expert in ~${eta} min` : 'Nearest expert online'}</Text>
+              <View className="mt-auto self-end"><Art name="bolt" size={82} /></View>
+            </Pressable>
+            <Pressable onPress={() => router.push({ pathname: '/customer/book/[slug]', params: { slug: 'any', mode: 'later' } })} accessibilityRole="button"
+              className="flex-1 rounded-[24px] bg-paper p-5 active:opacity-90 dark:bg-paper-dark" style={{ minHeight: 210 }}>
+              <Text className="font-jkb text-[22px] leading-[28px] text-ink dark:text-ink-dark">Schedule{'\n'}for later</Text>
+              <View className="mt-3 flex-row"><View className="rounded-full border border-brand px-3 py-1.5"><Text className="font-jkb text-[13px] text-brand dark:text-brand-dark">Pick a slot</Text></View></View>
+              <View className="mt-auto self-end"><Art name="calendar" size={82} /></View>
+            </Pressable>
+          </View>
+        )}
       </BrandPanel>
 
       <View className="gap-5 px-4 pt-5">
@@ -98,7 +114,7 @@ export default function CustomerHome() {
           </Card>
         ) : null}
 
-        {USE_EMULATORS && partners.length === 0 ? (
+        {USE_EMULATORS && partners.length === 0 && !outside ? (
           <Card flat>
             <H>Testing alone? No experts online yet.</H>
             <Tiny>Load five demo experts who accept jobs and ride to your door on their own.</Tiny>
@@ -107,7 +123,7 @@ export default function CustomerHome() {
         ) : null}
 
         {/* ── Promo strip (the refer-a-friend slot in the reference) ────── */}
-        <Pressable onPress={() => router.push(`/customer/book/${lastDone ? bookingTasks(lastDone).join(',') : 'any'}`)} accessibilityRole="button">
+        {!outside ? <Pressable onPress={() => router.push(`/customer/book/${lastDone ? bookingTasks(lastDone).join(',') : 'any'}`)} accessibilityRole="button">
           <BrandPanel radius={24} style={{ paddingHorizontal: 20, paddingVertical: 22, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
             <Art name="party" size={72} />
             <View className="flex-1">
@@ -116,7 +132,7 @@ export default function CustomerHome() {
             </View>
             <View className="h-12 w-12 items-center justify-center rounded-full bg-hero-deep"><ChevronRight size={22} color="#FFFFFF" /></View>
           </BrandPanel>
-        </Pressable>
+        </Pressable> : null}
 
         {/* ── Task catalogue ───────────────────────────────────────────── */}
         <View className="px-1">

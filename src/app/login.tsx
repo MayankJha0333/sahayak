@@ -220,7 +220,7 @@ export default function Login() {
           ) : step === 'otp' ? (
             <Btn title={busy ? 'Verifying' : 'Verify & continue'} busy={busy} disabled={otp.length < OTP_LENGTH} onPress={() => verify()} />
           ) : (
-            <Btn title={role === 'partner' ? 'Start earning' : 'Start booking'} busy={busy} disabled={name.trim().length < 2} onPress={start} />
+            <Btn title={role === 'partner' ? 'Continue' : 'Start booking'} busy={busy} disabled={name.trim().length < 2} onPress={start} />
           )}
         </View>
       </KeyboardAvoidingView>

@@ -5,6 +5,7 @@ export type { DocumentData, Query, QueryConstraint } from './firestore.jssdk';
 export const db = impl.db;
 export const addDoc = impl.addDoc;
 export const collection = impl.collection;
+export const deleteDoc = impl.deleteDoc;
 export const doc = impl.doc;
 export const getDoc = impl.getDoc;
 export const limit = impl.limit;

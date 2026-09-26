@@ -1,8 +1,8 @@
 import { currentUid } from './fb/auth';
-import { addDoc, collection, db, doc, getDoc, setDoc, updateDoc } from './fb/firestore';
+import { addDoc, collection, db, deleteDoc, doc, getDoc, setDoc, updateDoc } from './fb/firestore';
 import { callable as call } from './fb/functions';
 import type { LatLng } from './geo';
-import type { Address, FeedbackDoc, ShiftDoc } from './types';
+import type { Address, Area, Coupon, FeedbackDoc, KycFileDoc, KycFileKind, ReferralConfig, ShiftDoc } from './types';
 
 /* ---------- payments ---------- */
 
@@ -33,12 +33,53 @@ export const verifyExtension = call<{ bookingId: string; paymentId: string; orde
 export const finishJob = call<{ bookingId: string; flags?: string[] }, { ok: true }>('finishJob');
 export const rateJob = call<{ bookingId: string; rating: number; tags: string[] }, { ok: true }>('rateJob');
 
+/* ---------- coupons, areas, waitlist ---------- */
+
+export const previewCoupon = call<{ code: string; price: number }, { code: string; title: string; amount: number }>('previewCoupon');
+/** Of the given start times, the ones with a free, skilled expert near this address. */
+export const slotAvailability = call<{ tasks: string[]; addressId: string; durationMin: number; times: number[] }, { free: number[]; experts: number }>('slotAvailability');
+export type CouponInfo = {
+  code: string; title: string; description: string; type: 'flat' | 'percent'; value: number;
+  maxDiscount: number | null; minOrder: number | null; endsAt: number | null; firstOrderOnly: boolean;
+};
+/** Coupons that fit this booking (with the saving) and the ones that do not yet (with why). */
+export const listMyCoupons = call<{ price: number }, { coupons: (CouponInfo & { amount: number })[]; unavailable?: (CouponInfo & { reason: string })[] }>('listMyCoupons');
+/** How many people are already waiting within 3 km of a spot (only the count). */
+export const waitlistNear = call<{ at: LatLng }, { near: number }>('waitlistNear');
+export const joinWaitlist = call<{ at: LatLng; line?: string; city?: string }, { ok: true; served: boolean; opensAt?: number | null; areaName?: string | null; phone?: string }>('joinWaitlist');
+
+/* ---------- expert sign-up and wallet ---------- */
+
+export const submitKyc = call<{
+  fullName: string; dob: string; gender?: string; homeAddress: string; areaId: string; skills: string[]; aadhaar: string; consent: boolean;
+}, { ok: true }>('submitKyc');
+export const setPayoutMethod = call<
+  { type: 'upi'; upi: string; holderName: string } | { type: 'bank'; holderName: string; ifsc: string; accountNumber: string },
+  { ok: true; label: string }>('setPayoutMethod');
+export const setAutoPayout = call<{ on: boolean }, { ok: true }>('setAutoPayout');
+export const withdraw = call<Record<string, never>, { ok: true; amount: number; status: string }>('withdraw');
+
+/** Saves one Aadhaar photo or the selfie (a small base64 JPEG) where only she and ops can read it. */
+export async function uploadKycFile(kind: KycFileKind, img: { base64: string; width: number; height: number }) {
+  const uid = currentUid(); if (!uid) throw new Error('Not signed in');
+  const f: KycFileDoc = {
+    partnerId: uid, kind, data: img.base64, mime: 'image/jpeg', bytes: Math.round((img.base64.length * 3) / 4),
+    width: img.width, height: img.height, uploadedAt: Date.now(),
+  };
+  await setDoc(doc(db(), `kycFiles/${uid}_${kind}`), f);
+}
+
 /* ---------- admin ---------- */
 
 export const adminForceAssign = call<{ bookingId: string; partnerId?: string }, { ok: true }>('adminForceAssign');
 export const adminCancelRefund = call<{ bookingId: string }, { refunded: number }>('adminCancelRefund');
-export const adminSetPayoutAccount = call<{ partnerId: string; accountId: string }, { ok: true; retried: number }>('adminSetPayoutAccount');
 export const adminReleaseEarning = call<{ bookingId: string }, { ok: true }>('adminReleaseEarning');
+export const adminHoldEarning = call<{ bookingId: string; reason: string }, { ok: true }>('adminHoldEarning');
+export const adminPayoutNow = call<{ partnerId: string }, { ok: true; amount: number }>('adminPayoutNow');
+export const adminReviewKyc = call<{ partnerId: string; decision: 'approve' | 'reject'; reason?: string }, { ok: true }>('adminReviewKyc');
+export const adminUpdatePartner = call<{ partnerId: string; suspended?: boolean; reason?: string; areaId?: string }, { ok: true }>('adminUpdatePartner');
+export const adminMarkWaitlist = call<{ ids: string[]; status: 'notified' | 'waiting' | 'removed' }, { ok: true; count: number }>('adminMarkWaitlist');
+export const adminGiveCredit = call<{ userId: string; amount: number; note?: string }, { ok: true }>('adminGiveCredit');
 export const devTestJob = call<Record<string, never>, { bookingId: string }>('devTestJob');
 export const devAdmin = call<Record<string, never>, { email: string; password: string }>('devAdmin');
 export const seedDemo = call<Record<string, never>, { partners: number; shifts: number }>('seedDemo');
@@ -79,3 +120,21 @@ export async function setDefaultAddress(addressId: string) {
   const uid = currentUid(); if (!uid) return;
   await updateDoc(doc(db(), `users/${uid}`), { defaultAddressId: addressId });
 }
+
+/* ---------- ops: direct writes the rules allow for admins ---------- */
+
+export async function saveArea(id: string | null, a: Omit<Area, 'createdAt'> & { createdAt?: number }) {
+  const ref = id ? doc(db(), `areas/${id}`) : doc(collection(db(), 'areas'));
+  await setDoc(ref, { ...a, createdAt: a.createdAt ?? Date.now(), updatedAt: Date.now() });
+  return ref.id;
+}
+export const deleteArea = (id: string) => deleteDoc(doc(db(), `areas/${id}`));
+
+/** Coupon codes are the document id, upper-case with no spaces. */
+export const couponId = (code: string) => code.trim().toUpperCase().replace(/\s+/g, '');
+export async function saveCoupon(c: Coupon) {
+  const code = couponId(c.code);
+  await setDoc(doc(db(), `coupons/${code}`), { ...c, code, updatedAt: Date.now() });
+}
+export const deleteCoupon = (code: string) => deleteDoc(doc(db(), `coupons/${couponId(code)}`));
+export const saveReferralConfig = (c: ReferralConfig) => setDoc(doc(db(), 'config/referral'), { ...c, updatedAt: Date.now() });

@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs, type Href } from 'expo-router';
 import { CircleUser, IndianRupee, Zap } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { useLiveLocation } from '@/lib/useLiveLocation';
@@ -9,6 +9,8 @@ export default function PartnerTabs() {
   const { c } = useTheme();
   const { partner } = useAuth();
   useLiveLocation(Boolean(partner?.onShift) && !partner?.bot);
+  // New experts finish sign-up and wait for the Aadhaar check before they see jobs.
+  if (partner && !partner.bot && !partner.verified) return <Redirect href={'/partner/verify' as Href} />;
   return (
     <Tabs
       tabBar={(props) => <TabBar {...props} />}

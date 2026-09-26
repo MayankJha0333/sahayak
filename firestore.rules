@@ -19,12 +19,33 @@ service cloud.firestore {
 
     // Partners are visible to any signed-in user (customers see name and rating while tracking).
     // A partner may update her own live fields only.
+    // Verification, payout details and suspension are set only by Cloud Functions / ops.
+    // She can go online only once ops has verified her Aadhaar.
     match /partners/{uid} {
       allow read: if signedIn();
-      allow create: if isMe(uid);
+      allow create: if isMe(uid)
+        && !request.resource.data.keys().hasAny(['verified', 'kyc', 'bot', 'suspended', 'payoutMethod', 'payoutContactId', 'areaId', 'autoPayout'])
+        && request.resource.data.onShift == false;
       allow update: if (isMe(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['at', 'onShift', 'name', 'initials', 'skills', 'hub', 'shift']))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['at', 'onShift', 'shift'])
+        && (request.resource.data.onShift == false
+            || (resource.data.get('verified', false) == true && resource.data.get('suspended', false) == false)))
         || isAdmin();
+    }
+
+    // Aadhaar photos and selfie, one document each (base64 JPEG). Only she and ops can see them.
+    // She can replace them until she submits, and again if ops sends them back. The server deletes them
+    // 30 days after approval.
+    match /kycFiles/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.partnerId == request.auth.uid);
+      allow create, update: if signedIn()
+        && request.resource.data.partnerId == request.auth.uid
+        && request.resource.data.kind in ['aadhaarFront', 'aadhaarBack', 'selfie']
+        && id == request.auth.uid + '_' + request.resource.data.kind
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 950000
+        && get(/databases/$(db)/documents/partners/$(request.auth.uid)).data.get('kyc', {}).get('status', 'not_started') in ['not_started', 'rejected'];
+      allow delete: if false;
     }
 
     // Bookings are written by Cloud Functions. Parties can read theirs.
@@ -65,7 +86,36 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Wallet payouts. Written only by Cloud Functions.
+    match /withdrawals/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.partnerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Where we serve. Everyone signed in can read (the app checks addresses); ops edits.
+    match /areas/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Anyone can look up a code; only public coupons can be listed. Ops edits.
+    match /coupons/{code} {
+      allow get: if signedIn();
+      allow list: if isAdmin() || (signedIn() && resource.data.public == true);
+      allow write: if isAdmin();
+    }
+
+    // People outside our areas. Written by the joinWaitlist function.
+    match /waitlist/{uid} {
+      allow read: if isAdmin() || isMe(uid);
+      allow write: if false;
+    }
+
+    match /refundQueue/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /auditLog/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /creditLog/{id} { allow read: if isAdmin(); allow write: if false; }
+
     match /admins/{uid} { allow read: if isMe(uid) || isAdmin(); allow write: if false; }
-    match /config/{doc} { allow read: if signedIn(); allow write: if false; }
+    match /config/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
   }
 }

@@ -69,6 +69,13 @@ const config: ExpoConfig = {
       },
     ],
     'expo-maps',
+    [
+      'expo-image-picker',
+      {
+        photosPermission: 'Experts upload a photo of their Aadhaar card for verification.',
+        cameraPermission: 'Experts take a photo of their Aadhaar card and a selfie for verification.',
+      },
+    ],
   ],
 
   experiments: { typedRoutes: true, reactCompiler: true },

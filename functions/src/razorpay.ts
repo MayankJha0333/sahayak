@@ -88,30 +88,66 @@ export async function refund(paymentId: string, amountPaise: number, notes: Reco
 }
 
 /* ------------------------------------------------------------------ *
- * Route: the expert's share goes to her Razorpay linked account.
+ * RazorpayX Payouts: experts withdraw their earnings to UPI or a bank account.
+ * The Node SDK does not cover RazorpayX, so these call the REST API directly.
  * ------------------------------------------------------------------ */
 
-export type TransferResult = { id: string; amountPaise: number; source: string };
+const payoutAccount = process.env.RAZORPAYX_ACCOUNT_NUMBER ?? '';
+/** Emulator without a RazorpayX account number: payouts are stand-ins that succeed at once. */
+export const payoutsMock = !payoutAccount && process.env.FUNCTIONS_EMULATOR === 'true';
+export const payoutsConfigured = Boolean(payoutAccount && keyId && keySecret) || payoutsMock;
 
-/** Moves part of a captured customer payment to the expert, held until `holdUntil` (unix seconds) for disputes. */
-export async function transferFromPayment(paymentId: string, account: string, amountPaise: number, notes: Record<string, string>, holdUntil?: number): Promise<TransferResult> {
-  if (razorpayMock) return { id: `trf_test_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, amountPaise, source: paymentId };
-  const res = await rzp().payments.transfer(paymentId, {
-    transfers: [{ account, amount: amountPaise, currency: 'INR', notes, linked_account_notes: Object.keys(notes).slice(0, 3), on_hold: Boolean(holdUntil), ...(holdUntil ? { on_hold_until: holdUntil } : {}) } as never],
+export class RazorpayXError extends Error {
+  constructor(message: string, public status = 0, public field?: string) { super(message); }
+}
+
+async function rzpx<T>(path: string, body: unknown, idempotencyKey?: string): Promise<T> {
+  const res = await fetch(`https://api.razorpay.com/v1${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+      ...(idempotencyKey ? { 'X-Payout-Idempotency': idempotencyKey } : {}),
+    },
+    body: JSON.stringify(body),
   });
-  const t = (res as unknown as { items: { id: string; amount: number }[] }).items[0];
-  return { id: t.id, amountPaise: Number(t.amount), source: paymentId };
+  const json = (await res.json().catch(() => ({}))) as { error?: { description?: string; field?: string } } & T;
+  if (!res.ok) throw new RazorpayXError(json.error?.description ?? `RazorpayX error ${res.status}`, res.status, json.error?.field);
+  return json;
 }
 
-/** When the customer paid less than the expert earns (coupon or rewards), Sahayak tops up from its own balance. */
-export async function directTransfer(account: string, amountPaise: number, notes: Record<string, string>): Promise<TransferResult> {
-  if (razorpayMock) return { id: `trf_test_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, amountPaise, source: 'balance' };
-  const t = await rzp().transfers.create({ account, amount: amountPaise, currency: 'INR', notes } as never);
-  return { id: t.id, amountPaise: Number(t.amount), source: 'balance' };
+/** One contact per expert; fund accounts (UPI or bank) hang off it. */
+export async function createContact(p: { name: string; phone?: string; referenceId: string }) {
+  if (payoutsMock) return { id: `cont_test_${p.referenceId.slice(0, 10)}` };
+  return rzpx<{ id: string }>('/contacts', {
+    name: p.name.slice(0, 50), contact: p.phone?.replace(/^\+91/, ''), type: 'employee', reference_id: p.referenceId.slice(0, 40),
+  });
 }
 
-/** Keep (or release) a transfer's settlement, e.g. while a complaint is looked at. */
-export async function setTransferHold(transferId: string, hold: boolean) {
-  if (razorpayMock || transferId.startsWith('trf_test_')) return;
-  await rzp().transfers.edit(transferId, { on_hold: hold ? 1 : 0 } as never);
+export async function createFundAccount(contactId: string, m: { type: 'upi'; upi: string } | { type: 'bank'; holderName: string; ifsc: string; accountNumber: string }) {
+  if (payoutsMock) return { id: `fa_test_${Date.now().toString(36)}` };
+  return rzpx<{ id: string }>('/fund_accounts', m.type === 'upi'
+    ? { contact_id: contactId, account_type: 'vpa', vpa: { address: m.upi } }
+    : { contact_id: contactId, account_type: 'bank_account', bank_account: { name: m.holderName, ifsc: m.ifsc, account_number: m.accountNumber } });
+}
+
+export type PayoutResult = { id: string; status: string; utr?: string | null; failureReason?: string | null };
+
+/** Sends money from Sahayak's RazorpayX account. The withdrawal id doubles as the idempotency key, so a retry never pays twice. */
+export async function createPayout(p: { fundAccountId: string; amountPaise: number; mode: 'UPI' | 'IMPS'; referenceId: string; narration: string }): Promise<PayoutResult> {
+  if (payoutsMock) return { id: `pout_test_${Date.now().toString(36)}`, status: 'processed', utr: `TESTUTR${Date.now().toString().slice(-8)}` };
+  if (!payoutAccount) throw new RazorpayXError('RazorpayX is not set up on the server (RAZORPAYX_ACCOUNT_NUMBER).');
+  const r = await rzpx<{ id: string; status: string; utr?: string; status_details?: { description?: string } }>('/payouts', {
+    account_number: payoutAccount, fund_account_id: p.fundAccountId, amount: p.amountPaise, currency: 'INR',
+    mode: p.mode, purpose: 'payout', queue_if_low_balance: true, reference_id: p.referenceId.slice(0, 40), narration: p.narration.slice(0, 30),
+  }, p.referenceId);
+  return { id: r.id, status: r.status, utr: r.utr ?? null, failureReason: r.status_details?.description ?? null };
+}
+
+/** RazorpayX webhooks are signed with their own secret (set when adding the webhook in the RazorpayX dashboard). */
+export function verifyPayoutWebhook(rawBody: string, signature: string) {
+  const secret = process.env.RAZORPAYX_WEBHOOK_SECRET || webhookSecret;
+  if (!secret) return payoutsMock;
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  return safeEqual(expected, signature);
 }

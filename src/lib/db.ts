@@ -5,7 +5,8 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from './auth';
 import type {
-  BookingDoc, EarningDoc, FeedbackDoc, OfferDoc, PartnerDoc, ReferralDoc, ShiftDoc, WithId,
+  Area, BookingDoc, Coupon, EarningDoc, FeedbackDoc, KycFileDoc, OfferDoc, PartnerDoc, ReferralConfig, ReferralDoc, ShiftDoc,
+  WaitlistDoc, WithdrawalDoc, WithId,
 } from './types';
 
 /* ---------- generic live hooks ---------- */
@@ -101,6 +102,16 @@ export function useMyEarnings() {
     useMemo(() => [where('partnerId', '==', user?.uid ?? '_'), orderBy('createdAt', 'desc'), limit(100)], [user?.uid]), Boolean(user));
 }
 
+export function useMyWithdrawals() {
+  const { user } = useAuth();
+  return useCollection<WithdrawalDoc>('withdrawals',
+    useMemo(() => [where('partnerId', '==', user?.uid ?? '_'), orderBy('createdAt', 'desc'), limit(50)], [user?.uid]), Boolean(user));
+}
+
+/** Her own Aadhaar photos and selfie (while they are kept). */
+export const useKycFile = (partnerId: string | undefined, kind: KycFileDoc['kind']) =>
+  useDoc<KycFileDoc>(partnerId ? `kycFiles/${partnerId}_${kind}` : null);
+
 export function useMyShifts() {
   const { user } = useAuth();
   return useCollection<ShiftDoc>('shifts',
@@ -115,3 +126,12 @@ export const useAllOffers = () => useCollection<OfferDoc>('offers', useMemo(() =
 export const useAllFeedback = () => useCollection<FeedbackDoc>('feedback', useMemo(() => [orderBy('at', 'desc'), limit(50)], []));
 export const useAllEarnings = () => useCollection<EarningDoc>('earnings', useMemo(() => [orderBy('createdAt', 'desc'), limit(200)], []));
 export const useAllReferrals = () => useCollection<ReferralDoc>('referrals', useMemo(() => [orderBy('invitedAt', 'desc'), limit(100)], []));
+export const useAllWithdrawals = () => useCollection<WithdrawalDoc>('withdrawals', useMemo(() => [orderBy('createdAt', 'desc'), limit(200)], []));
+export const useAllCoupons = () => useCollection<Coupon>('coupons', useMemo(() => [limit(200)], []));
+export const useAllWaitlist = () => useCollection<WaitlistDoc>('waitlist', useMemo(() => [orderBy('createdAt', 'desc'), limit(500)], []));
+export const useReferralConfig = () => useDoc<ReferralConfig>('config/referral');
+
+/** Where we serve. Everyone signed in can read this. Empty until ops adds one (the server then serves Gurugram). */
+/** My own waitlist entry (null = not on it). */
+export const useMyWaitlist = (uid?: string | null) => useDoc<WaitlistDoc>(uid ? `waitlist/${uid}` : null);
+export const useAreas = () => useCollection<Area>('areas', useMemo(() => [limit(100)], []));

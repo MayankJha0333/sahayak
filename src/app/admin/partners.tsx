@@ -1,117 +1,112 @@
+import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { Panel, Table } from '@/components/admin';
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Panel, Table, kycBadge } from '@/components/admin';
 import { Avatar, Badge, Btn, Note, Stat, Tiny, Title } from '@/components/ui';
-import { adminReleaseEarning, adminSetPayoutAccount } from '@/lib/api';
-import { LIVE, useAllBookings, useAllEarnings, useAllPartners } from '@/lib/db';
-import { distanceM, km } from '@/lib/geo';
-import { inr } from '@/lib/format';
-import { HOME, expertPay } from '@/lib/mock';
-
-const payout = (b: { price: number; extraMin: number; tip: number }) => expertPay(b).total;
-
-/** Link an expert's Razorpay Route account (acc_…) so her payouts can go out. */
-function LinkAccount({ partnerId, name }: { partnerId: string; name: string }) {
-  const [acc, setAcc] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-  return (
-    <View className="gap-2 border-b border-line2 py-2.5 dark:border-line2-dark">
-      <Text className="font-jks text-[13px] text-ink dark:text-ink-dark">{name} · bank not linked</Text>
-      <View className="flex-row items-center gap-2">
-        <TextInput value={acc} onChangeText={setAcc} placeholder="acc_XXXXXXXXXXXXXX" autoCapitalize="none" autoCorrect={false}
-          className="font-jk flex-1 rounded-xl bg-sunk px-3 py-2.5 text-[13px] text-ink dark:bg-sunk-dark dark:text-ink-dark" />
-        <Btn title="Link" size="sm" busy={busy} disabled={acc.trim().length < 8} onPress={async () => {
-          setBusy(true); setMsg('');
-          try { const r = await adminSetPayoutAccount({ partnerId, accountId: acc.trim() }); setMsg(r.retried ? `Linked · ${r.retried} waiting payout${r.retried > 1 ? 's' : ''} sent` : 'Linked'); setAcc(''); }
-          catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
-        }} />
-      </View>
-      {msg ? <Tiny>{msg}</Tiny> : <Tiny>Create the linked account in Razorpay → Route after her KYC, then paste its id.</Tiny>}
-    </View>
-  );
-}
+import { adminReleaseEarning } from '@/lib/api';
+import { LIVE, useAllBookings, useAllEarnings, useAllPartners, useAllWithdrawals } from '@/lib/db';
+import { inr, whenLabel } from '@/lib/format';
 
 export default function AdminPartners() {
+  const router = useRouter();
   const { rows: partners } = useAllPartners();
   const { rows: bookings } = useAllBookings();
   const { rows: earnings } = useAllEarnings();
+  const { rows: withdrawals } = useAllWithdrawals();
   const [releasing, setReleasing] = useState<string | null>(null);
-  const needsAction = earnings.filter((e) => e.status !== 'sent');
-  const unlinked = partners.filter((p) => !p.bot && !p.payout?.accountId);
   const { width } = useWindowDimensions();
   const narrow = width < 700;
 
+  const queue = partners.filter((p) => !p.bot && p.kyc?.status === 'submitted').sort((a, b) => (a.kyc?.submittedAt ?? 0) - (b.kyc?.submittedAt ?? 0));
+  const onHold = earnings.filter((e) => e.status === 'on_hold');
+  const failed = withdrawals.filter((w) => w.status === 'failed').slice(0, 10);
+  const paidOut = withdrawals.filter((w) => w.status === 'paid').reduce((n, w) => n + w.amount, 0);
   const busy = new Set(bookings.filter((b) => LIVE.includes(b.status)).map((b) => b.partnerId));
-  const status = (p: (typeof partners)[number]) =>
+  const live = (p: (typeof partners)[number]) =>
     busy.has(p.id) ? { tone: 'brand' as const, label: 'on a job' } : p.onShift ? { tone: 'ok' as const, label: 'online' } : { tone: 'neutral' as const, label: 'offline' };
-  const earned = (id: string) => bookings.filter((b) => b.partnerId === id && b.status === 'completed').reduce((n, b) => n + payout(b), 0);
-  // Real people first, then whoever is online.
+  const wallet = (id: string) => earnings.filter((e) => e.partnerId === id && !['withdrawn', 'sent'].includes(e.status)).reduce((n, e) => n + e.total, 0);
   const sorted = [...partners].sort((a, b) => Number(Boolean(a.bot)) - Number(Boolean(b.bot)) || Number(b.onShift) - Number(a.onShift));
+  const open = (id: string) => router.push(`/admin/expert/${id}` as Href);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} keyboardShouldPersistTaps="handled">
-      <Title>Partners</Title>
+      <Title>Experts</Title>
       <View className="flex-row flex-wrap gap-2">
-        <Stat label="On roster" value={String(partners.length)} />
+        <Stat label="To verify" value={String(queue.length)} tone={queue.length ? 'crit' : undefined} />
+        <Stat label="Verified" value={String(partners.filter((p) => p.verified && !p.bot).length)} />
         <Stat label="Online" value={String(partners.filter((p) => p.onShift).length)} />
-        <Stat label="On a job" value={String(busy.size)} />
-        <Stat label="Demo experts" value={String(partners.filter((p) => p.bot).length)} />
+        <Stat label="Paid out" value={inr(paidOut)} />
       </View>
 
-      <Panel title={`Payouts · Razorpay Route · ${earnings.filter((e) => e.status === 'sent').length} sent`} wide>
-        {unlinked.map((p) => <LinkAccount key={p.id} partnerId={p.id} name={p.name} />)}
-        {needsAction.map((e) => {
+      <Panel title={`Waiting for verification · ${queue.length}`} wide>
+        {queue.length === 0 ? <Tiny>No one is waiting. New experts appear here once they send their Aadhaar and selfie.</Tiny> : null}
+        {queue.map((p) => (
+          <Pressable key={p.id} onPress={() => open(p.id)} accessibilityRole="button" className="flex-row items-center gap-3 border-b border-line2 py-2.5 dark:border-line2-dark">
+            <Avatar initials={p.initials} size={34} />
+            <View className="flex-1">
+              <Text className="font-jks text-[13.5px] text-ink dark:text-ink-dark">{p.kyc?.fullName ?? p.name}</Text>
+              <Tiny>{p.hub} · Aadhaar ••{p.kyc?.aadhaarLast4} · sent {p.kyc?.submittedAt ? whenLabel(p.kyc.submittedAt) : ''}</Tiny>
+            </View>
+            <Btn title="Review" size="sm" onPress={() => open(p.id)} />
+          </Pressable>
+        ))}
+      </Panel>
+
+      <Panel title="Payouts that need you" wide>
+        {onHold.map((e) => {
           const p = partners.find((x) => x.id === e.partnerId);
           return (
-            <View key={e.bookingId} className="flex-row items-center gap-2 border-b border-line2 py-2.5 dark:border-line2-dark">
+            <View key={e.id} className="flex-row items-center gap-2 border-b border-line2 py-2.5 dark:border-line2-dark">
               <View className="flex-1">
-                <Text className="font-jks text-[13px] text-ink dark:text-ink-dark">{p?.name ?? e.partnerId} · {inr(e.total)}</Text>
-                <Tiny>{e.bookingId} · {e.status.replace('_', ' ')}{e.error ? ` · ${e.error}` : ''}</Tiny>
+                <Text className="font-jks text-[13px] text-ink dark:text-ink-dark">{p?.name ?? e.partnerId} · {inr(e.total)} on hold</Text>
+                <Tiny>{e.bookingId}{e.holdReason ? ` · ${e.holdReason}` : ''}</Tiny>
               </View>
-              {e.status !== 'awaiting_account' ? (
-                <Btn title={e.status === 'on_hold' ? 'Release' : 'Retry'} size="sm" tone="secondary" busy={releasing === e.bookingId}
-                  onPress={async () => { setReleasing(e.bookingId); try { await adminReleaseEarning({ bookingId: e.bookingId }); } finally { setReleasing(null); } }} />
-              ) : null}
+              <Btn title="Release" size="sm" tone="secondary" busy={releasing === e.id}
+                onPress={async () => { setReleasing(e.id); try { await adminReleaseEarning({ bookingId: e.bookingId }); } finally { setReleasing(null); } }} />
             </View>
           );
         })}
-        {!unlinked.length && !needsAction.length ? <Tiny>Every finished job has been paid out. Transfers settle to the expert's bank a day after the visit.</Tiny> : null}
+        {failed.map((w) => (
+          <Pressable key={w.id} onPress={() => open(w.partnerId)} className="flex-row items-center gap-2 border-b border-line2 py-2.5 dark:border-line2-dark">
+            <View className="flex-1">
+              <Text className="font-jks text-[13px] text-ink dark:text-ink-dark">{w.partnerName} · {inr(w.amount)} failed</Text>
+              <Tiny>{w.method.label} · {whenLabel(w.createdAt)} · {w.error}</Tiny>
+            </View>
+            <Badge tone="crit" label="failed" />
+          </Pressable>
+        ))}
+        {!onHold.length && !failed.length ? <Tiny>Nothing on hold and no failed payouts. Experts withdraw to UPI or bank through RazorpayX.</Tiny> : null}
       </Panel>
-      {needsAction.some((e) => e.status === 'on_hold') ? <Note tone="warn">Payouts on hold came from a rating of 2★ or less. Release them once the complaint is sorted.</Note> : null}
+      {onHold.length ? <Note tone="warn">Money on hold came from a rating of 2★ or less. Release it once the complaint is sorted.</Note> : null}
 
       {narrow ? (
         <View className="gap-2.5">
-          {sorted.length === 0 ? <Tiny>No partners yet.</Tiny> : null}
           {sorted.map((p) => {
-            const s = status(p);
+            const s = live(p); const k = kycBadge(p);
             return (
-              <View key={p.id} className="gap-2 rounded-2xl border border-line2 bg-paper p-3.5 dark:border-line2-dark dark:bg-paper-dark">
+              <Pressable key={p.id} onPress={() => open(p.id)} className="gap-2 rounded-2xl border border-line2 bg-paper p-3.5 dark:border-line2-dark dark:bg-paper-dark">
                 <View className="flex-row items-center gap-3">
                   <Avatar initials={p.initials} size={38} />
                   <View className="flex-1">
-                    <Text className="font-jkb text-[14.5px] text-ink dark:text-ink-dark">{p.name}{p.bot ? ' · demo' : ''}</Text>
-                    <Tiny>{p.hub} hub · {km(distanceM(p.at, HOME))} from centre</Tiny>
+                    <Text className="font-jkb text-[14.5px] text-ink dark:text-ink-dark">{p.name}</Text>
+                    <Tiny>{p.hub} · {p.rating}★ · {p.jobs} job{p.jobs === 1 ? '' : 's'}</Tiny>
                   </View>
-                  <Badge tone={s.tone} label={s.label} />
+                  <View className="items-end gap-1"><Badge tone={k.tone} label={k.label} /><Badge tone={s.tone} label={s.label} /></View>
                 </View>
-                <View className="flex-row justify-between">
-                  <Tiny>{p.rating}★ · {p.jobs} job{p.jobs === 1 ? '' : 's'} · {p.onTime}% on time</Tiny>
-                  <Text className="font-jkx text-[12.5px] text-ink dark:text-ink-dark">{inr(earned(p.id))} earned</Text>
-                </View>
-                <Tiny>{p.skills.join(' · ')}</Tiny>
-              </View>
+                <Tiny>Wallet {inr(wallet(p.id))} · {p.payoutMethod ? p.payoutMethod.label : 'no payout account'}</Tiny>
+              </Pressable>
             );
           })}
         </View>
       ) : (
         <Panel title="Roster" wide>
-          <Table head={['Name', 'Type', 'Hub', 'Skills', 'Rating', 'Jobs', 'From centre', 'Earned', 'Status']}
+          <Table head={['Name', 'Check', 'Area', 'Skills', 'Rating', 'Jobs', 'Wallet', 'Payout to', 'Status']}
             rows={sorted.map((p) => {
-              const s = status(p);
+              const s = live(p); const k = kycBadge(p);
               return [
-                <Text key="n" className="font-jkx text-[12px] text-ink dark:text-ink-dark">{p.name}</Text>,
-                p.bot ? 'demo' : 'real', p.hub, p.skills.join(', '), String(p.rating), String(p.jobs), km(distanceM(p.at, HOME)), inr(earned(p.id)),
+                <Pressable key="n" onPress={() => open(p.id)}><Text className="font-jkx text-[12px] text-brand dark:text-brand-dark">{p.name}</Text></Pressable>,
+                <Badge key="k" tone={k.tone} label={k.label} />,
+                p.hub, p.skills.join(', '), String(p.rating), String(p.jobs), inr(wallet(p.id)), p.payoutMethod?.label ?? '—',
                 <Badge key="s" tone={s.tone} label={s.label} />,
               ];
             })} />

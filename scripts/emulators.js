@@ -38,6 +38,6 @@ if (!hasJava(env)) {
   process.exit(1);
 }
 
-const args = ['-y', 'firebase-tools@latest', 'emulators:start', '--only', 'auth,firestore,functions', '--project', 'demo-sahayak'];
+const args = ['-y', 'firebase-tools@latest', 'emulators:start', '--only', 'auth,firestore,functions,hosting', '--project', 'demo-sahayak'];
 const child = spawn('npx', args, { env, stdio: 'inherit', shell: process.platform === 'win32' });
 child.on('exit', (code) => process.exit(code ?? 0));

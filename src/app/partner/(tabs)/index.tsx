@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandPanel } from '@/components/BrandPanel';
 import { ChevronRight } from '@/components/icons';
@@ -44,7 +44,13 @@ export default function PartnerJobs() {
   const today = mine.filter((b) => b.status === 'completed' && (b.endedAt ?? b.createdAt) >= startOfToday());
   const todayEarnings = today.reduce((n, b) => n + payout(b), 0);
   const online = partners.filter((p) => p.onShift && p.id !== user.uid).length;
-  const toggle = async (v: boolean) => { setToggling(true); try { await setOnShift(v); } finally { setToggling(false); } };
+  const toggle = async (v: boolean) => {
+    if (v && partner.suspended) { Alert.alert('Account on hold', partner.suspendReason || 'Please call support to find out more.'); return; }
+    setToggling(true);
+    try { await setOnShift(v); }
+    catch { Alert.alert('Could not go online', 'Check your internet and try again.'); }
+    finally { setToggling(false); }
+  };
 
   return (
     <ScrollView
@@ -52,6 +58,7 @@ export default function PartnerJobs() {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ padding: 16, gap: 14, paddingTop: insets.top + 8, paddingBottom: 32 }}>
 
+      {partner.suspended ? <Note tone="crit">Your account is on hold{partner.suspendReason ? `: ${partner.suspendReason}` : ''}. You cannot go online until our team restores it.</Note> : null}
       <BrandPanel radius={34} style={{ gap: 20, paddingHorizontal: 20, paddingVertical: 20 }}>
         <View className="flex-row items-center gap-3">
           <Avatar initials={partner.initials} size={42} />
@@ -135,7 +142,7 @@ export default function PartnerJobs() {
         ) : (
           <Card>
             <H>You are offline</H>
-            <Body>Go online when you are ready to work. Each job pays {Math.round(PARTNER_SHARE * 100)}% of the booking. Money reaches your bank a day after each job.</Body>
+            <Body>Go online when you are ready to work. Each job pays {Math.round(PARTNER_SHARE * 100)}% of the booking. Your pay is ready to withdraw a day after each job.</Body>
           </Card>
         )
       ) : null}

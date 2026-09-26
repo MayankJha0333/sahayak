@@ -1,5 +1,7 @@
 import { type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import { inr } from '@/lib/format';
+import type { Coupon, PartnerDoc } from '@/lib/types';
 import { Eyebrow, Tiny } from './ui';
 
 export function Panel({ title, children, wide }: { title: string; children: ReactNode; wide?: boolean }) {
@@ -56,3 +58,17 @@ export function Bars({ values }: { values: number[] }) {
     </View>
   );
 }
+
+/** Verification state of an expert, as ops needs to see it. */
+export function kycBadge(p: PartnerDoc): { tone: 'ok' | 'warn' | 'crit' | 'neutral' | 'brand'; label: string } {
+  if (p.bot) return { tone: 'neutral', label: 'demo' };
+  if (p.suspended) return { tone: 'crit', label: 'suspended' };
+  if (p.verified) return { tone: 'ok', label: 'verified' };
+  const s = p.kyc?.status ?? 'not_started';
+  return s === 'submitted' ? { tone: 'warn', label: 'to review' } : s === 'rejected' ? { tone: 'crit', label: 'sent back' } : { tone: 'neutral', label: 'signing up' };
+}
+
+/** One line that says what a coupon does. */
+export const couponSummary = (c: Coupon) =>
+  `${c.type === 'percent' ? `${c.value}% off${c.maxDiscount ? ` up to ${inr(c.maxDiscount)}` : ''}` : `${inr(c.value)} off`}`
+  + `${c.minOrder ? ` · min ${inr(c.minOrder)}` : ''}${c.firstOrderOnly ? ' · first booking' : ''} · ${c.perUserLimit ?? 1}× per customer`;

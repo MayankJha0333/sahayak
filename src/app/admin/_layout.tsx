@@ -8,7 +8,11 @@ import { useTheme } from '@/theme';
 const NAV = [
   { href: '/admin', label: 'Live ops' },
   { href: '/admin/bookings', label: 'Bookings' },
-  { href: '/admin/partners', label: 'Partners' },
+  { href: '/admin/partners', label: 'Experts' },
+  { href: '/admin/areas', label: 'Areas' },
+  { href: '/admin/coupons', label: 'Coupons' },
+  { href: '/admin/waitlist', label: 'Waitlist' },
+  { href: '/admin/referrals', label: 'Referrals' },
   { href: '/admin/feedback', label: 'Feedback' },
 ] as const;
 
@@ -26,7 +30,7 @@ export default function AdminLayout() {
   if (!user || !isAdmin) return <Redirect href="/admin/login" />;
 
   const item = (href: string, label: string) => {
-    const on = path === href;
+    const on = path === href || (href === '/admin/partners' && path.startsWith('/admin/expert'));
     return (
       <Pressable key={href} accessibilityRole="button" onPress={() => router.replace(href as '/admin')}
         className={`rounded-lg px-3 py-2 ${on ? 'bg-brand-soft dark:bg-brand-softdark' : ''}`}>

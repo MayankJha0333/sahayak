@@ -4,11 +4,12 @@ import { Text, TextInput, View } from 'react-native';
 import { MapPicker } from '@/components/MapPicker';
 import { AppBar, Btn, Card, Chip, Eyebrow, Note, Screen, Tiny } from '@/components/ui';
 import { saveAddress } from '@/lib/api';
+import { useServiceArea } from '@/lib/areas';
 import { useAuth } from '@/lib/auth';
 import type { LatLng } from '@/lib/geo';
 import { HOME } from '@/lib/mock';
-import { inServiceArea } from '@/lib/useLiveLocation';
 import { useTheme } from '@/theme';
+import { AreaStatus, useWaitlistJoin } from '@/components/NotServed';
 
 const LABELS = ['Home', 'Parents', 'Office', 'Other'];
 
@@ -27,14 +28,20 @@ export default function AddressScreen() {
   const [directions, setDirections] = useState(existing?.directions ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const { served, loading: areasLoading } = useServiceArea();
+  // Outside every live area: the main button becomes "Join the waitlist"; saving is still possible for later.
+  const outside = !areasLoading && !served(at);
+  const wl = useWaitlistJoin(at, [line1.trim(), line2.trim()].filter(Boolean).join(', '), line2.split(',').pop()?.trim());
   const ok = line1.trim().length > 1 && line2.trim().length > 2;
 
   const save = async () => {
-    if (!inServiceArea(at)) { setErr('We only serve Gurugram for now. Move the pin to an address in the city.'); return; }
     setBusy(true); setErr('');
     try {
-      await saveAddress({ id: existing?.id ?? `a${Date.now().toString(36)}`, label, line1: line1.trim(), line2: line2.trim(), directions: directions.trim(), at }, !existing && !profile?.addresses.length);
-      router.back();
+      const id = existing?.id ?? `a${Date.now().toString(36)}`;
+      await saveAddress({ id, label, line1: line1.trim(), line2: line2.trim(), directions: directions.trim(), at }, !existing && !profile?.addresses.length);
+      // Not served yet: show the full coming-soon page for this address instead of dropping her back home.
+      if (outside) router.replace({ pathname: '/customer/coming-soon', params: { id } });
+      else router.back();
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   };
@@ -47,8 +54,18 @@ export default function AddressScreen() {
   return (
     <View className="flex-1 bg-ground dark:bg-ground-dark">
       <AppBar title={existing ? 'Edit address' : 'Where should she come?'} subtitle="Drop the pin on your gate" back />
-      <Screen footer={<Btn title={existing ? 'Save address' : 'Save and use this address'} busy={busy} disabled={!ok} onPress={save} />}>
-        <MapPicker value={at} onChange={(p, place) => { setAt(p); if (place && !existing) setLine2(place); }} height={300} />
+      <Screen footer={(
+        <>
+          <Btn title={existing ? 'Save address' : outside ? 'Save address' : 'Save and use this address'} busy={busy} disabled={!ok} onPress={save} />
+          {!ok ? <Text className="font-jk text-center text-[12px] text-ink3 dark:text-ink3-dark">Add your flat / house number and area to save</Text> : null}
+        </>
+      )}>
+        <MapPicker value={at} onChange={(p, place) => { setAt(p);  if (place && !existing) setLine2(place); }} height={300} />
+        <AreaStatus at={at} />
+        {/* Not served yet: saving still works; the waitlist is one tap away here and on the home screen. */}
+        {outside ? (wl.onList
+          ? <Note tone="ok">You are on the waitlist for this address. We will message you when we start here.</Note>
+          : <Btn title="Join the waitlist" size="sm" tone="secondary" busy={wl.busy} onPress={wl.join} />) : null}
         <Tiny>Move the map until the pin sits on your building. The expert rides to this exact point.</Tiny>
 
         <Card>
@@ -62,6 +79,7 @@ export default function AddressScreen() {
           {field({ value: directions, onChangeText: setDirections, placeholder: 'Gate 2, tell the guard "Sahayak". Lift on the right.', accessibilityLabel: 'Directions', multiline: true })}
         </Card>
         {err ? <Note tone="crit">{err}</Note> : null}
+        {outside && wl.err ? <Note tone="crit">{wl.err}</Note> : null}
         <Text className="font-jk text-center text-[11px] text-ink3 dark:text-ink3-dark">Your address is shown to the expert only after she accepts the job.</Text>
       </Screen>
     </View>

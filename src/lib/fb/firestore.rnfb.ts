@@ -1,6 +1,6 @@
 import {
   addDoc, collection, connectFirestoreEmulator, doc, getDoc, getFirestore, limit, onSnapshot, orderBy, query,
-  setDoc, updateDoc, where, type DocumentData, type Firestore, type Query, type QueryConstraint,
+  deleteDoc, setDoc, updateDoc, where, type DocumentData, type Firestore, type Query, type QueryConstraint,
 } from '@react-native-firebase/firestore';
 import { USE_EMULATORS, emulatorHost } from '../firebase';
 
@@ -13,5 +13,5 @@ export function db() {
   return _db;
 }
 
-export { addDoc, collection, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where };
+export { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where };
 export type { DocumentData, Query, QueryConstraint };

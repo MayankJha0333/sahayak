@@ -88,11 +88,13 @@ export default function PartnerProfile() {
         </View>
 
         <View className="overflow-hidden rounded-[22px] bg-paper dark:bg-paper-dark" style={shadow}>
-          {info(BadgeCheck, 'ID and background check', 'Done by the Sahayak team before your first job', c.ok)}
+          {info(BadgeCheck, 'Aadhaar verification',
+            partner.bot ? 'Demo expert' : partner.verified ? `Verified${partner.kyc?.aadhaarLast4 ? ` · Aadhaar ending ${partner.kyc.aadhaarLast4}` : ''}` : 'Waiting for our team',
+            partner.verified || partner.bot ? c.ok : c.warn)}
           <Divider />
           {info(Banknote, 'Payouts',
-            partner.payout?.accountId ? 'Bank linked through Razorpay · paid after every job' : 'Bank not linked yet — the team does this after your ID check',
-            partner.payout?.accountId ? c.ok : c.warn)}
+            partner.payoutMethod ? `${partner.payoutMethod.label} · ${partner.autoPayout === false ? 'withdraw any time' : 'weekly auto-payout on'}` : 'Add a UPI ID or bank account in Earnings',
+            partner.payoutMethod ? c.ok : c.warn)}
           <Divider />
           {info(HeartPulse, 'Insurance', 'Accident cover while you are on a job')}
         </View>

@@ -27,12 +27,23 @@ export default function Help() {
   const [text, setText] = useState('');
   const [attach, setAttach] = useState(true);
   const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   const last = bookings.find((b) => b.status === 'completed');
 
   const submit = async () => {
     Keyboard.dismiss();
-    await addFeedback(kind, text, attach && last ? last.id : undefined);
-    setText(''); setSent(true); setTimeout(() => setSent(false), 2500);
+    setBusy(true); setErr('');
+    try {
+      // A phone that cannot reach the server would otherwise wait here forever with no sign of it.
+      const ok = await Promise.race([
+        addFeedback(kind, text, attach && last ? last.id : undefined).then(() => true),
+        new Promise<false>((done) => setTimeout(() => done(false), 12_000)),
+      ]);
+      if (!ok) { setErr('Could not reach Sahayak. Check your internet and try again.'); return; }
+      setText(''); setSent(true); setTimeout(() => setSent(false), 2500);
+    } catch (e) { setErr((e as Error).message || 'Could not send. Please try again.'); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -56,7 +67,8 @@ export default function Help() {
               <Chip label={attach ? 'Attached' : 'Attach'} on={attach} onPress={() => setAttach(!attach)} />
             </View>
           ) : null}
-          <Btn title={sent ? 'Sent — thank you' : 'Send'} disabled={text.trim().length < 3} tone={sent ? 'secondary' : 'primary'}
+          {err ? <Note tone="crit">{err}</Note> : null}
+          <Btn title={sent ? 'Sent — thank you' : 'Send'} busy={busy} disabled={text.trim().length < 3} tone={sent ? 'secondary' : 'primary'}
             icon={sent ? undefined : <Send size={16} color={c.onBrand} />} onPress={submit} />
         </Card>
         {feedback.length ? (

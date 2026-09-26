@@ -1,21 +1,28 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
-import { Text, View } from 'react-native';
-import { AppBar, Btn, Card, Chip, Eyebrow, Note, Screen, SplitRow, Tiny } from '@/components/ui';
-import { createOrder, verifyPayment, type OrderResult } from '@/lib/api';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { AppBar, Btn, Card, Eyebrow, Note, Screen, SplitRow, Tiny } from '@/components/ui';
+import { Check, ChevronRight, Tag } from '@/components/icons';
+import { takeCoupon } from '@/lib/bookingDraft';
+import { createOrder, listMyCoupons, verifyPayment, type OrderResult } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useAllPartners, useMyBookings } from '@/lib/db';
+import { useAllPartners } from '@/lib/db';
 import { usePay } from '@/lib/usePay';
 import { distanceM, km, travelEstimate } from '@/lib/geo';
 import { clock, inr, whenLabel } from '@/lib/format';
 import { OVERTIME_PER_MIN, priceForMinutes, serviceBySlug, tasksTitle } from '@/lib/mock';
+import { useTheme } from '@/theme';
+import { NotServed } from '@/components/NotServed';
+import { useServiceArea } from '@/lib/areas';
+
+type Applied = { code: string; title: string; amount: number; description?: string };
 
 export default function Review() {
   const router = useRouter();
   const { tasks: tasksParam, duration, when } = useLocalSearchParams<{ tasks: string; duration: string; when: string }>();
   const { profile } = useAuth();
   const { rows: partners } = useAllPartners();
-  const { rows: mine } = useMyBookings();
+  const { c } = useTheme();
 
   const tasks = String(tasksParam ?? '').split(',').filter(Boolean);
   const durationMin = Number(duration);
@@ -23,12 +30,15 @@ export default function Review() {
   const skills = [...new Set(tasks.map((t) => serviceBySlug(t).skill))];
   const scheduledFor = when ? Number(when) : null;
   const address = profile?.addresses.find((a) => a.id === profile.defaultAddressId) ?? profile?.addresses[0];
+  const { served, loading: areasLoading } = useServiceArea();
+  // Outside every live area (checked live, and again by the server when paying).
+  const blocked = Boolean(address) && !areasLoading && (!served(address!.at));
 
-  // Same rule as the server: FIRST50 once, and not while another booking that used it is still open.
-  const couponUsed = mine.some((b) => b.paid && b.status !== 'cancelled' && b.discount - (b.rewardUsed ?? 0) > 0);
-  const couponAllowed = !profile?.firstBookingDone && !couponUsed;
-  const [couponOn, setCoupon] = useState(true);
-  const coupon = couponOn && couponAllowed;
+  // Coupons she can use are listed by the server, which applies the same rules when she pays.
+  const [offers, setOffers] = useState<Applied[]>([]);
+  const [applied, setApplied] = useState<Applied | null>(null);
+  // "FIRST50 applied" for a moment after she comes back from the coupon page.
+  const [justApplied, setJustApplied] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const checkout = usePay();
@@ -37,7 +47,29 @@ export default function Review() {
   const lastOrder = useRef<{ key: string; o: OrderResult } | null>(null);
 
   const base = priceForMinutes(durationMin);
-  const couponOff = coupon ? 50 : 0;
+  useEffect(() => {
+    let live = true;
+    listMyCoupons({ price: base }).then((r) => {
+      if (!live) return;
+      const list = r.coupons.sort((a, b) => b.amount - a.amount);
+      // Nothing is applied for her: she opens the list and picks one herself.
+      setOffers(list);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [base]);
+  // Back from the coupon page: take what she picked (or removed).
+  useFocusEffect(useCallback(() => {
+    const picked = takeCoupon();
+    if (picked === undefined) return;
+    setApplied(picked);
+    setJustApplied(picked ? `${picked.code} applied — you save ${inr(picked.amount)}` : '');
+  }, [setApplied, setJustApplied]));
+  useEffect(() => {
+    if (!justApplied) return;
+    const t = setTimeout(() => setJustApplied(''), 3500);
+    return () => clearTimeout(t);
+  }, [justApplied]);
+  const couponOff = applied?.amount ?? 0;
   const rewardOff = Math.min(profile?.rewards ?? 0, Math.max(0, base - couponOff));
   const due = Math.max(0, base - couponOff - rewardOff);
   const skilled = partners.filter((p) => p.onShift && skills.every((sk) => p.skills.includes(sk)) && (!address || distanceM(p.at, address.at) < 3000));
@@ -58,12 +90,12 @@ export default function Review() {
   const pay = async () => {
     if (!address) return;
     setBusy(true); setErr(''); setNote('');
-    const key = `${tasks.join(',')}|${durationMin}|${scheduledFor}|${coupon}|${address.id}`;
+    const key = `${tasks.join(',')}|${durationMin}|${scheduledFor}|${applied?.code ?? ''}|${address.id}`;
     try {
       // A checkout that was closed or failed is reused on the next tap, so a retry never makes a second booking.
       let o = lastOrder.current?.key === key ? lastOrder.current.o : null;
       if (!o) {
-        o = await createOrder({ tasks, durationMin, addressId: address.id, scheduledFor, coupon: coupon ? 'FIRST50' : undefined });
+        o = await createOrder({ tasks, durationMin, addressId: address.id, scheduledFor, coupon: applied?.code });
         if (o.amount === 0) { openBooking(o.bookingId); return; }
         lastOrder.current = { key, o };
       }
@@ -82,7 +114,8 @@ export default function Review() {
       <Screen
         footer={
           <>
-            {address ? <Btn title={due > 0 ? `Pay ${inr(due)} with Razorpay` : 'Confirm · covered by rewards'} busy={busy || checkout.busy} onPress={pay} />
+            {address && blocked ? <Btn title="Not available here yet — change address" tone="secondary" onPress={() => router.push('/customer/address')} />
+              : address ? <Btn title={due > 0 ? `Pay ${inr(due)} with Razorpay` : 'Confirm · covered by rewards'} busy={busy || checkout.busy} onPress={pay} />
               : <Btn title="Add your address to continue" onPress={() => router.push('/customer/address')} />}
             <Tiny>{scheduledFor ? 'Free to cancel until 2 hours before the slot.' : 'Free to cancel until 2 minutes after an expert accepts.'} Refunds go back the way you paid.</Tiny>
           </>
@@ -104,16 +137,34 @@ export default function Review() {
         <Card>
           <Eyebrow>Bill</Eyebrow>
           <SplitRow label={`Expert for ${durationMin} min`} value={inr(base)} />
-          {couponOff ? <SplitRow label="FIRST50" value={`-${inr(couponOff)}`} /> : null}
+          {couponOff && applied ? <SplitRow label={`Coupon ${applied.code}`} value={`-${inr(couponOff)}`} /> : null}
           {rewardOff ? <SplitRow label="Referral reward" value={`-${inr(rewardOff)}`} /> : null}
           <View className="h-px bg-line2 dark:bg-line2-dark" />
           <SplitRow label="Pay now" value={inr(due)} strong />
-          <View className="flex-row flex-wrap gap-2 pt-1">
-            {couponAllowed ? <Chip label={coupon ? 'FIRST50 applied' : 'Apply FIRST50'} on={coupon} onPress={() => setCoupon(!couponOn)} /> : null}
-          </View>
         </Card>
 
-        {err ? <Note tone="crit">{err}</Note> : null}
+        <Pressable accessibilityRole="button" accessibilityLabel={applied ? `Coupon ${applied.code} applied. Change coupon` : 'Apply a coupon'}
+          onPress={() => router.push({ pathname: '/customer/coupons', params: { price: String(base), ...(applied ? { applied: applied.code } : {}) } })}
+          className="flex-row items-center gap-3 rounded-[24px] bg-paper px-4 py-4 active:opacity-90 dark:bg-paper-dark">
+          <View className={`h-10 w-10 items-center justify-center rounded-2xl ${applied ? 'bg-ok-soft dark:bg-ok-softdark' : 'bg-brand-soft dark:bg-brand-softdark'}`}>
+            {applied ? <Check size={18} color={c.ok} /> : <Tag size={18} color={c.brand} />}
+          </View>
+          <View className="flex-1">
+            <Text className="font-jkb text-[15px] text-ink dark:text-ink-dark">{applied ? `${applied.code} applied` : 'Apply coupon'}</Text>
+            <Tiny>{applied ? `You save ${inr(applied.amount)} · tap to change` : offers.length ? `${offers.length} offer${offers.length > 1 ? 's' : ''} available · save up to ${inr(Math.max(...offers.map((o) => o.amount)))}` : 'See offers or enter a code'}</Tiny>
+          </View>
+          {applied ? (
+            <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel="Remove coupon" onPress={() => { setApplied(null); setJustApplied(''); }}>
+              <Text className="font-jkb text-[13px] text-crit dark:text-crit-dark">Remove</Text>
+            </Pressable>
+          ) : <ChevronRight size={20} color={c.ink3} />}
+        </Pressable>
+        {justApplied ? <Note tone="ok">{justApplied}</Note> : null}
+
+        {err && !blocked ? <Note tone="crit">{err}</Note> : null}
+        {blocked && address ? (
+          <NotServed at={address.at} line={`${address.line1}, ${address.line2}`} city={address.line2.split(',').pop()?.trim()} onChangeAddress={() => router.push('/customer/address')} />
+        ) : null}
         {note ? <Note>{note}</Note> : null}
         <Note tone="warn">
           Need more time during the visit? Add 15, 30 or 60 minutes from the app at {inr(OVERTIME_PER_MIN)} a minute, paid when you add it.

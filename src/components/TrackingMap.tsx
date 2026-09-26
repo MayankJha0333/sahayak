@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Home, Navigation } from './icons';
+import { WebMap, webMaps } from './WebMap';
 import type { LatLng } from '@/lib/geo';
 import { distanceM, routePoints } from '@/lib/geo';
 import { useTheme } from '@/theme';
@@ -38,27 +39,31 @@ export function TrackingMap({ origin, dest, at, height = 240, label, hideExpert,
 
   return (
     <View style={{ height, borderRadius: 28, overflow: 'hidden' }}>
-      <MapView
-        ref={map}
-        style={{ flex: 1 }}
-        initialRegion={{ ...toRN(dest), latitudeDelta: 0.03, longitudeDelta: 0.03 }}
-        showsCompass={false}
-        toolbarEnabled={false}
-        pitchEnabled={false}
-        rotateEnabled={false}>
-        {!close && road ? <Polyline coordinates={road} strokeColor={c.brand} strokeWidth={5} /> : null}
-        {!close && !road ? <Polyline coordinates={estimate} strokeColor={c.brand} strokeWidth={4} lineDashPattern={[1, 8]} /> : null}
-        <Marker coordinate={toRN(dest)} anchor={{ x: 0.5, y: 0.5 }} title="Your address">
-          <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.hero, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFFFFF' }}>
-            <Home size={15} color="#FFFFFF" />
-          </View>
-        </Marker>
-        {!hideExpert ? <Marker key={close ? 'expert-close' : 'expert'} coordinate={close ? { latitude: dest.lat + 0.00022, longitude: dest.lng + 0.00032 } : toRN(expert)} anchor={{ x: 0.5, y: 0.5 }} title="Expert">
-          <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFFFFF' }}>
-            <Navigation size={15} color="#FFFFFF" />
-          </View>
-        </Marker> : null}
-      </MapView>
+      {webMaps ? (
+        <WebMap view={close ? { center: dest, zoom: 16 } : { fit: road ? road.map((p) => ({ lat: p.latitude, lng: p.longitude })) : [expert, dest], pad: 56 }} lines={close ? [] : [{ points: (road ?? estimate).map((p) => ({ lat: p.latitude, lng: p.longitude })), color: c.brand, width: road ? 5 : 4, dashed: !road }]} markers={[{ id: 'dest', at: dest, bg: c.hero, border: '#FFFFFF', icon: 'home', size: 34, title: 'Your address' }, ...(!hideExpert ? [{ id: 'expert', at: close ? { lat: dest.lat + 0.00022, lng: dest.lng + 0.00032 } : expert, bg: c.brand, border: '#FFFFFF', icon: 'go' as const, size: 34, title: 'Expert' }] : [])]} />
+      ) : (
+        <MapView
+          ref={map}
+          style={{ flex: 1 }}
+          initialRegion={{ ...toRN(dest), latitudeDelta: 0.03, longitudeDelta: 0.03 }}
+          showsCompass={false}
+          toolbarEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}>
+          {!close && road ? <Polyline coordinates={road} strokeColor={c.brand} strokeWidth={5} /> : null}
+          {!close && !road ? <Polyline coordinates={estimate} strokeColor={c.brand} strokeWidth={4} lineDashPattern={[1, 8]} /> : null}
+          <Marker coordinate={toRN(dest)} anchor={{ x: 0.5, y: 0.5 }} title="Your address">
+            <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.hero, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFFFFF' }}>
+              <Home size={15} color="#FFFFFF" />
+            </View>
+          </Marker>
+          {!hideExpert ? <Marker key={close ? 'expert-close' : 'expert'} coordinate={close ? { latitude: dest.lat + 0.00022, longitude: dest.lng + 0.00032 } : toRN(expert)} anchor={{ x: 0.5, y: 0.5 }} title="Expert">
+            <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFFFFF' }}>
+              <Navigation size={15} color="#FFFFFF" />
+            </View>
+          </Marker> : null}
+        </MapView>
+      )}
       {label ? (
         <View style={{ position: 'absolute', left: 12, top: 12, backgroundColor: c.hero, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 }}>
           <Text className="font-jkb text-[12px] text-white">{label}</Text>

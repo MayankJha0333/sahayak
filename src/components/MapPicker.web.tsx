@@ -2,7 +2,7 @@ import { Text, View } from 'react-native';
 import { SchematicMap } from './SchematicMap';
 import type { LatLng } from '@/lib/geo';
 
-type Props = { value: LatLng; onChange: (at: LatLng, place?: string) => void; height?: number };
+type Props = { value: LatLng; onChange: (at: LatLng, place?: string) => void; height?: number; autoLocate?: boolean };
 
 /** The web build has no native map; addresses are set from the phone app. */
 export function MapPicker({ value, height = 300 }: Props) {

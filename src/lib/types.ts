@@ -1,4 +1,5 @@
 import type { LatLng } from './geo';
+import type { AreaShape } from './areaGeo';
 
 export type Role = 'customer' | 'partner' | 'admin';
 
@@ -32,10 +33,71 @@ export type PartnerDoc = {
   onTime: number;
   at: LatLng;
   bot?: boolean;
-  payout?: { accountId?: string; linkedAt?: number };
+  /** Set only by ops after the Aadhaar check. Unverified experts cannot go online. */
+  verified?: boolean;
+  suspended?: boolean;
+  suspendReason?: string;
+  kyc?: Kyc;
+  areaId?: string;
+  payoutMethod?: PayoutMethod;
+  /** Weekly Monday payout of everything available (on unless she turns it off). */
+  autoPayout?: boolean;
   referralEarned?: number;
   firstJobDone?: boolean;
   referredBy?: string;
+};
+
+export type KycStatus = 'not_started' | 'submitted' | 'approved' | 'rejected';
+export type Kyc = {
+  status: KycStatus;
+  fullName?: string; dob?: string; gender?: string; homeAddress?: string;
+  /** Only the last 4 digits are ever stored. */
+  aadhaarLast4?: string;
+  submittedAt?: number; reviewedAt?: number; rejectReason?: string;
+  filesDeleteAt?: number; filesDeleted?: boolean;
+};
+export type KycFileKind = 'aadhaarFront' | 'aadhaarBack' | 'selfie';
+export type KycFileDoc = { partnerId: string; kind: KycFileKind; data: string; mime: string; bytes: number; width: number; height: number; uploadedAt: number };
+
+export type PayoutMethod = {
+  type: 'upi' | 'bank'; label: string; holderName: string;
+  upi?: string; ifsc?: string; last4?: string; bankName?: string; addedAt: number;
+};
+
+/** Where we serve. `shape: 'border'` areas follow a real state / district / city border from OpenStreetMap. */
+export type Area = AreaShape & {
+  name: string; city: string; state?: string;
+  level?: 'state' | 'district' | 'subdistrict' | 'city' | 'place'; osmId?: number;
+  /** Where a pin area came from, e.g. "Patel Nagar · West Delhi, Delhi" — shown to ops only. */
+  place?: string;
+  /** Bookings are on. */
+  active: boolean;
+  /** Launch date (ms). In the future: "coming soon" — customers there see the date. Once it passes, the area serves by itself. */
+  opensAt?: number | null;
+  createdAt: number; updatedAt?: number;
+};
+
+export type Coupon = {
+  code: string; title: string; description?: string;
+  type: 'flat' | 'percent'; value: number; maxDiscount?: number; minOrder?: number;
+  firstOrderOnly?: boolean; perUserLimit?: number; totalLimit?: number; used?: number;
+  active: boolean; public?: boolean; startsAt?: number | null; endsAt?: number | null; createdAt: number; updatedAt?: number;
+};
+
+export type WaitlistDoc = {
+  userId: string; name: string; phone: string; role: string; at: LatLng; line: string; city: string;
+  status: 'waiting' | 'notified'; createdAt: number; updatedAt: number; notifiedAt?: number;
+  /** The "coming soon" area this address is in, and its launch date, when they joined. */
+  soonAreaId?: string | null; opensAt?: number | null;
+};
+
+export type ReferralConfig = { active: boolean; customerReward: number; partnerReward: number };
+
+export type WithdrawalDoc = {
+  partnerId: string; partnerName: string; amount: number; earningIds: string[];
+  status: 'processing' | 'paid' | 'failed';
+  method: { type: 'upi' | 'bank'; label: string }; trigger: 'manual' | 'weekly' | 'admin';
+  payoutId?: string; utr?: string | null; error?: string; createdAt: number; updatedAt: number; paidAt?: number;
 };
 
 export type BookingStatus =
@@ -89,16 +151,18 @@ export type BookingDoc = {
   workedMin?: number;
   paymentError?: string;
   paidAt?: number;
+  couponCode?: string;
+  couponDiscount?: number;
 };
 
 export type Extension = { minutes: number; amount: number; orderId: string; paymentId: string; at: number };
 
-/** The expert's payout for one visit (Razorpay Route transfers to her linked account). */
+/** One visit's pay in the expert's wallet. Withdrawable from `availableAt` unless on hold. */
 export type EarningDoc = {
   partnerId: string; bookingId: string; jobPay: number; extraPay: number; tip: number; total: number;
-  status: 'awaiting_account' | 'sent' | 'on_hold' | 'failed';
-  transfers: { id: string; amount: number; source: string }[];
-  releaseAt?: number; error?: string; createdAt: number; updatedAt: number;
+  /** Older entries may say 'sent' (paid out) or 'awaiting_account' / 'failed' (still in the wallet). */
+  status: 'earned' | 'on_hold' | 'withdrawn' | 'sent' | 'awaiting_account' | 'failed';
+  availableAt?: number; withdrawalId?: string; holdReason?: string; createdAt: number; updatedAt: number;
 };
 
 export type OfferDoc = { bookingId: string; partnerId: string; stage: 1 | 2; expiresAt: number; createdAt: number };

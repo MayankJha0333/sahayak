@@ -167,7 +167,7 @@ export default function PartnerJob() {
           <Eyebrow>Anything to report?</Eyebrow>
           <View className="flex-row flex-wrap gap-2">{FLAGS.map((f) => <Chip key={f} label={f} on={flags.includes(f)} onPress={() => setFlags(flags.includes(f) ? flags.filter((x) => x !== f) : [...flags, f])} />)}</View>
         </Card>
-        <Card><SplitRow label="You earn from this job" value={inr(payout(b))} strong /><Tiny>Paid into your weekly payout on Monday.</Tiny></Card>
+        <Card><SplitRow label="You earn from this job" value={inr(payout(b))} strong /><Tiny>Goes into your wallet when you finish. Ready to withdraw a day later.</Tiny></Card>
       </Screen>
     </View>
   );

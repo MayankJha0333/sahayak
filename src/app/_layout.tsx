@@ -21,7 +21,10 @@ import { useReferralCapture } from '@/lib/referral';
 import { ThemeProvider } from '@/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
-colorScheme.set('light');
+// On web the scheme follows the browser (and static rendering has no window), so this can throw there.
+try {
+  colorScheme.set('light');
+} catch {}
 
 export default function RootLayout() {
   const [ready] = useFonts({

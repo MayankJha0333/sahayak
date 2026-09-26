@@ -1,22 +1,26 @@
-import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, getFirestore, type Transaction } from 'firebase-admin/firestore';
-import { HttpsError, onCall, onRequest, type CallableRequest } from 'firebase-functions/v2/https';
+import { canWork, db, isAdmin, must, requireAdmin, uid, type PartnerDoc } from './shared';
+import { FieldValue, type Transaction } from 'firebase-admin/firestore';
+import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { logger, setGlobalOptions } from 'firebase-functions/v2';
+import { logger } from 'firebase-functions/v2';
 import {
-  DURATIONS, FIRST_COUPON, GIVE_UP_MS, LATE_CANCEL_FEE, OVERTIME_PER_MIN, RADII_M, REFERRAL_REWARD,
+  DURATIONS, GIVE_UP_MS, LATE_CANCEL_FEE, OVERTIME_PER_MIN, RADII_M,
   STAGE1_MS, STAGE2_MS, VISIT_FEE, priceForMinutes, service, skillsFor, isOpenAt } from './catalog';
 import { HANDOVER_MIN, along, distanceM, etaMinutes, travelEstimate, type LatLng } from './geo';
 import {
-  NotPaidError, RAZORPAY_KEY_ID, confirmPayment, createOrder as rzpOrder, directTransfer, razorpayConfigured, razorpayMock,
-  refund as rzpRefund, setTransferHold, transferFromPayment, verifyWebhook,
+  NotPaidError, RAZORPAY_KEY_ID, confirmPayment, createOrder as rzpOrder, razorpayConfigured,
+  refund as rzpRefund, verifyWebhook,
 } from './razorpay';
+import { countCouponUse, coverageFor, evaluateCoupon, referralConfig } from './growth';
+import { deleteExpiredKycFiles } from './kyc';
+import { creditEarning, holdEarning } from './wallet';
 
-initializeApp();
-setGlobalOptions({ region: 'asia-south1', maxInstances: 20 });
-const db = getFirestore();
+export * from './growth';
+export * from './kyc';
+export * from './wallet';
+
 
 /* ================================================================== */
 /* types + helpers                                                     */
@@ -24,12 +28,6 @@ const db = getFirestore();
 
 type Address = { id: string; label: string; line1: string; line2: string; directions: string; at: LatLng };
 type UserDoc = { role: string; phone: string; name: string; rewards: number; referredBy?: string; referralCode: string; addresses: Address[]; firstBookingDone?: boolean };
-type PartnerDoc = {
-  name: string; initials: string; rating: number; jobs: number; skills: string[]; hub: string; onShift: boolean; reliability: number; onTime: number; at: LatLng;
-  bot?: boolean; referralEarned?: number; firstJobDone?: boolean; referredBy?: string;
-  /** Razorpay Route linked account (acc_…) her share is transferred to. Set by ops after KYC. */
-  payout?: { accountId?: string; linkedAt?: number };
-};
 /** Extra time the customer bought during the visit, paid there and then. */
 type Extension = { minutes: number; amount: number; orderId: string; paymentId: string; at: number };
 /** Travel from the expert to the door, estimated when she is assigned. */
@@ -52,12 +50,7 @@ type Booking = {
   leaveAt?: number;
   workedMin?: number;
   paymentError?: string;
-};
-type Earning = {
-  partnerId: string; bookingId: string; jobPay: number; extraPay: number; tip: number; total: number;
-  status: 'awaiting_account' | 'sent' | 'on_hold' | 'failed';
-  transfers: { id: string; amount: number; source: string }[];
-  releaseAt?: number; error?: string; createdAt: number; updatedAt: number;
+  couponCode?: string; couponDiscount?: number;
 };
 const PARTNER_SHARE = 0.62;
 /** Demo experts squeeze a visit into 90 s; one booked minute is one real second for them. */
@@ -66,21 +59,11 @@ const EXTENSION_OPTIONS = [15, 30, 60];
 const MAX_EXTRA_MIN = 120;
 /** After the paid time ends the visit closes on its own if nobody extends or finishes it. */
 const GRACE_MS = 10 * 60_000;
-/** The expert's share settles to her bank a day after the visit, leaving time to look at a complaint. */
-const PAYOUT_HOLD_S = 24 * 60 * 60;
 
-const uid = (r: CallableRequest<unknown>) => {
-  if (!r.auth) throw new HttpsError('unauthenticated', 'Sign in first.');
-  return r.auth.uid;
-};
-const must = <T>(v: T | undefined | null, msg: string): T => { if (v == null) throw new HttpsError('failed-precondition', msg); return v; };
 const code4 = () => String(Math.floor(1000 + Math.random() * 9000));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const bookingRef = (id: string) => db.collection('bookings').doc(id);
 const offerId = (bookingId: string, partnerId: string) => `${bookingId}_${partnerId}`;
-/** Gurugram for now: addresses outside this circle are not served. Mirrors src/lib/useLiveLocation.ts. */
-const CITY = { lat: 28.4419, lng: 77.0723 };
-const SERVICE_RADIUS_M = 40_000;
 const LIVE_STATUSES = ['payment_pending', 'matching', 'assigned', 'arrived', 'in_progress'];
 
 /**
@@ -102,8 +85,41 @@ async function reserveFor(b: { tasks: string[]; address: Address; scheduledFor: 
   return ranked.find((p) => p.id === b.preferredPartnerId) ?? ranked[0];
 }
 
-async function isAdmin(u: string) { return (await db.collection('admins').doc(u).get()).exists; }
-async function requireAdmin(r: CallableRequest<unknown>) { const u = uid(r); if (!(await isAdmin(u))) throw new HttpsError('permission-denied', 'Admins only.'); return u; }
+
+/**
+ * Which start times have a skilled expert within 5 km who is not already booked then — the same
+ * rule createOrder applies — so the app only offers slots that can really be booked.
+ */
+export const slotAvailability = onCall<{ tasks: string[]; addressId: string; durationMin: number; times: number[] }>(async (r) => {
+  const u = uid(r);
+  const i = r.data;
+  const tasks = [...new Set(i.tasks ?? [])].filter((t) => service(t));
+  if (tasks.length === 0) throw new HttpsError('invalid-argument', 'Pick at least one task.');
+  if (!DURATIONS.includes(i.durationMin)) throw new HttpsError('invalid-argument', 'That duration is not offered.');
+  const now = Date.now();
+  const times = [...new Set((i.times ?? []).map(Number))]
+    .filter((t) => Number.isFinite(t) && t >= now + 30 * 60_000 && t <= now + 7 * 24 * 60 * 60_000 && isOpenAt(t))
+    .slice(0, 24);
+  const user = must((await db.collection('users').doc(u).get()).data() as UserDoc | undefined, 'Profile missing.');
+  const address = must(user.addresses.find((a) => a.id === i.addressId), 'Address not found.');
+  if (!(await coverageFor(address.at)).serving || times.length === 0) return { free: [] as number[], experts: 0 };
+
+  const partners = (await db.collection('partners').get()).docs.map((d) => ({ id: d.id, d: { ...(d.data() as PartnerDoc), onShift: true } }));
+  const skills = skillsFor(tasks);
+  // Everyone who could ever take this job here; each slot then drops the ones already booked at that time.
+  const able = rank(partners, skills, address.at, new Set(), 5000);
+  if (able.length === 0) return { free: [] as number[], experts: 0 };
+  const from = Math.min(...times) - 4 * 60 * 60_000;
+  const booked = (await db.collection('bookings').where('scheduledFor', '>', from).get()).docs
+    .map((d) => d.data() as Booking)
+    .filter((x) => x.partnerId && x.scheduledFor && ['assigned', 'arrived', 'in_progress'].includes(x.status));
+  const free = times.filter((start) => {
+    const end = start + i.durationMin * 60_000;
+    const busy = new Set(booked.filter((x) => x.scheduledFor! < end && x.scheduledFor! + x.durationMin * 60_000 > start).map((x) => x.partnerId!));
+    return able.some((p) => !busy.has(p.id));
+  });
+  return { free, experts: able.length };
+});
 
 async function getBooking(id: string) {
   const s = await bookingRef(id).get();
@@ -123,7 +139,7 @@ async function addReward(userId: string, amount: number, tx?: Transaction) {
 
 function rank(partners: { id: string; d: PartnerDoc }[], skills: string[], at: LatLng, excluded: Set<string>, radiusM: number) {
   return partners
-    .filter((p) => p.d.onShift && skills.every((sk) => p.d.skills.includes(sk)) && !excluded.has(p.id))
+    .filter((p) => p.d.onShift && canWork(p.d) && skills.every((sk) => p.d.skills.includes(sk)) && !excluded.has(p.id))
     .map((p) => {
       const dist = distanceM(p.d.at, at);
       const score = (1 - Math.min(1, dist / 4000)) * 0.5 + p.d.reliability * 0.25 + (p.d.rating / 5) * 0.15 + 0.1;
@@ -160,7 +176,13 @@ export const createOrder = onCall<CreateOrderIn>(async (r) => {
 
   const user = must((await db.collection('users').doc(u).get()).data() as UserDoc | undefined, 'Profile missing.');
   const address = must(user.addresses.find((a) => a.id === i.addressId), 'Address not found.');
-  if (distanceM(address.at, CITY) > SERVICE_RADIUS_M) throw new HttpsError('failed-precondition', 'We only serve Gurugram for now. Pick an address in the city.');
+  const cov = await coverageFor(address.at);
+  if (!cov.serving) {
+    const when = cov.soon?.opensAt ? new Date(cov.soon.opensAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' }) : null;
+    throw new HttpsError('failed-precondition',
+      when ? `We start in ${cov.soon!.name} on ${when}. Join the waitlist and we will message you that day.` : 'Service is not available at this address yet. Join the waitlist and we will tell you when we arrive.',
+      { reason: when ? 'coming_soon' : 'outside_area', opensAt: cov.soon?.opensAt ?? null });
+  }
 
   // Experts work 8 AM to 7 PM: no instant visit outside those hours, and no slot that starts outside them.
   if (!isOpenAt(i.scheduledFor ?? Date.now())) {
@@ -181,9 +203,14 @@ export const createOrder = onCall<CreateOrderIn>(async (r) => {
   }
 
   const price = priceForMinutes(i.durationMin);
-  // FIRST50 is for the first booking only: not after one is done, and not twice while the first is still open.
-  const usedCouponBefore = mine.some((b) => b.paid && b.status !== 'cancelled' && b.discount - (b.rewardUsed ?? 0) > 0);
-  const coupon = i.coupon?.toUpperCase() === FIRST_COUPON.code && !user.firstBookingDone && !usedCouponBefore ? FIRST_COUPON.amount : 0;
+  // Coupons are checked here against the customer's own history, whatever the app showed.
+  let coupon = 0;
+  let couponCode: string | undefined;
+  if (i.coupon) {
+    const { coupon: c, res } = await evaluateCoupon(u, i.coupon, price);
+    if ('error' in res) throw new HttpsError('failed-precondition', res.error);
+    coupon = res.amount; couponCode = c!.code;
+  }
   const rewardUsed = i.useRewards === false ? 0 : Math.min(user.rewards ?? 0, Math.max(0, price - coupon));
   const discount = coupon + rewardUsed;
   const amountDue = Math.max(0, price + VISIT_FEE - discount);
@@ -192,6 +219,7 @@ export const createOrder = onCall<CreateOrderIn>(async (r) => {
   const base: Booking = {
     customerId: u, tasks, serviceSlug: tasks[0], durationMin: i.durationMin, addonSlugs: tasks.slice(1), address,
     price, fee: VISIT_FEE, discount, rewardUsed, amountDue,
+    ...(couponCode ? { couponCode, couponDiscount: coupon } : {}),
     status: 'payment_pending', paid: false, razorpay: { orderId: '' },
     ...(i.preferredPartnerId ? { preferredPartnerId: i.preferredPartnerId } : {}),
     startCode: code4(), extraMin: 0, tip: 0,
@@ -225,6 +253,7 @@ async function settlePaid(id: string, b: Booking, paymentId: string | null) {
     return true;
   });
   if (!first) return;
+  await countCouponUse(b.couponCode).catch(() => undefined);
   if (b.scheduledFor) {
     const pick = await reserveFor(b, id);
     // Work back from the slot: she sets off early enough to ride over and hand over before the start time.
@@ -649,7 +678,7 @@ export const rateJob = onCall<{ bookingId: string; rating: number; tags: string[
 });
 
 /* ================================================================== */
-/* expert payouts — Razorpay Route                                     */
+/* expert earnings — credited to her wallet (see wallet.ts)            */
 /* ================================================================== */
 
 const bookingIdOf = (b: Booking) => (b as Booking & { id: string }).id;
@@ -661,86 +690,34 @@ function expertPay(b: Booking) {
   return { jobPay, extraPay, tip: b.tip ?? 0, total: jobPay + extraPay + (b.tip ?? 0) };
 }
 
-/**
- * Sends the expert's share to her Razorpay linked account. The money comes out of the customer's own
- * payments first (booking, then extra time, then any balance), and Sahayak tops up the rest when a coupon
- * or rewards made the customer pay less. Each transfer is held for a day before it settles to her bank.
- * Safe to call again: it only sends what has not been sent yet.
- */
+/** Credits her share to her wallet. Coupons and rewards never lower what she earns: Sahayak covers them. */
 async function payExpert(bookingId: string) {
   const b = await getBooking(bookingId);
   if (!b.partnerId || b.status !== 'completed') return;
-  const eref = db.collection('earnings').doc(bookingId);
-  const prev = (await eref.get()).data() as Earning | undefined;
-  if (prev && (prev.status === 'sent' || prev.status === 'on_hold')) return;
   const pay = expertPay(b);
-  const partner = (await db.collection('partners').doc(b.partnerId).get()).data() as PartnerDoc | undefined;
-  const account = partner?.payout?.accountId;
-  const base: Earning = {
-    partnerId: b.partnerId, bookingId, ...pay, status: 'awaiting_account', transfers: prev?.transfers ?? [],
-    createdAt: prev?.createdAt ?? Date.now(), updatedAt: Date.now(),
-  };
-  if (!account) { await eref.set(base); return; }
-
-  const sources: { paymentId: string; paise: number }[] = [];
-  if (b.razorpay.paymentId && b.amountDue > 0 && !b.razorpay.refundId) sources.push({ paymentId: b.razorpay.paymentId, paise: b.amountDue * 100 });
-  (b.extensions ?? []).forEach((x) => sources.push({ paymentId: x.paymentId, paise: x.amount * 100 }));
-  if (b.balance?.paid && b.balance.paymentId) sources.push({ paymentId: b.balance.paymentId, paise: b.balance.amount * 100 });
-
-  const holdUntil = Math.floor(Date.now() / 1000) + PAYOUT_HOLD_S;
-  const notes = { bookingId, partnerId: b.partnerId, purpose: 'Sahayak visit payout' };
-  const already = base.transfers.reduce((n, t) => n + t.amount, 0) * 100;
-  let left = pay.total * 100 - already;
-  const transfers = [...base.transfers];
-  try {
-    for (const s of sources) {
-      if (left < 100) break;
-      const used = transfers.filter((t) => t.source === s.paymentId).reduce((n, t) => n + t.amount * 100, 0);
-      const take = Math.min(left, s.paise - used);
-      if (take < 100) continue;
-      const t = await transferFromPayment(s.paymentId, account, take, notes, holdUntil);
-      transfers.push({ id: t.id, amount: t.amountPaise / 100, source: s.paymentId });
-      left -= t.amountPaise;
-    }
-    if (left >= 100) {
-      const t = await directTransfer(account, left, notes);
-      transfers.push({ id: t.id, amount: t.amountPaise / 100, source: 'balance' });
-      left = 0;
-    }
-    await eref.set({ ...base, status: 'sent', transfers, releaseAt: holdUntil * 1000, updatedAt: Date.now() });
-    await log(bookingId, `Payout of ₹${pay.total} sent to ${partner?.name ?? 'the expert'}`);
-  } catch (e) {
-    await eref.set({ ...base, status: 'failed', transfers, error: (e as Error).message, updatedAt: Date.now() });
-  }
-}
-
-/** A complaint keeps the expert's money from settling until ops has looked at it. */
-async function holdEarning(bookingId: string, reason: string) {
-  const eref = db.collection('earnings').doc(bookingId);
-  const e = (await eref.get()).data() as Earning | undefined;
-  if (!e || e.status !== 'sent') return;
-  for (const t of e.transfers) await setTransferHold(t.id, true).catch(() => undefined);
-  await eref.update({ status: 'on_hold', error: reason, updatedAt: Date.now() });
+  await creditEarning(bookingId, b.partnerId, pay);
+  await log(bookingId, `₹${pay.total} added to the expert's wallet`);
 }
 
 /** A first completed booking (or first finished job) is what unlocks a referral reward. */
 async function onCompleted(b: Booking) {
   const uref = db.collection('users').doc(b.customerId);
   const user = (await uref.get()).data() as UserDoc | undefined;
+  const refCfg = await referralConfig();
   if (b.partnerId) await db.collection('partners').doc(b.partnerId).update({ jobs: FieldValue.increment(1) });
   if (b.partnerId) await payExpert(bookingIdOf(b)).catch((e) => log(bookingIdOf(b), `Payout error: ${(e as Error).message}`));
 
   if (user && !user.firstBookingDone) {
     await uref.update({ firstBookingDone: true });
-    if (user.referredBy) {
+    if (user.referredBy && refCfg.active && refCfg.customerReward > 0) {
       const refUser = await db.collection('users').where('referralCode', '==', user.referredBy).limit(1).get();
       if (!refUser.empty) {
         const referrer = refUser.docs[0];
-        await addReward(referrer.id, REFERRAL_REWARD);
+        await addReward(referrer.id, refCfg.customerReward);
         // The link carried the code, so this is the first we hear of the friend: record it now.
         await db.collection('referrals').add({
           referrerId: referrer.id, refereeId: b.customerId, side: 'customer', name: user.name, phone: user.phone,
-          status: 'joined', invitedAt: Date.now(), joinedAt: Date.now(), reward: REFERRAL_REWARD,
+          status: 'joined', invitedAt: Date.now(), joinedAt: Date.now(), reward: refCfg.customerReward,
         });
       }
     }
@@ -751,9 +728,9 @@ async function onCompleted(b: Booking) {
     const p = (await pref.get()).data() as PartnerDoc | undefined;
     if (p && !p.firstJobDone) {
       await pref.update({ firstJobDone: true });
-      if (p.referredBy) {
+      if (p.referredBy && refCfg.active && refCfg.partnerReward > 0) {
         const refUser = await db.collection('users').where('referralCode', '==', p.referredBy).limit(1).get();
-        if (!refUser.empty) await db.collection('partners').doc(refUser.docs[0].id).update({ referralEarned: FieldValue.increment(REFERRAL_REWARD) });
+        if (!refUser.empty) await db.collection('partners').doc(refUser.docs[0].id).update({ referralEarned: FieldValue.increment(refCfg.partnerReward) });
       }
     }
   }
@@ -863,6 +840,7 @@ export const tick = onSchedule('every 1 minutes', async () => {
   const stale = await db.collection('bookings').where('status', '==', 'payment_pending').where('createdAt', '<', now - 30 * 60_000).get();
   for (const d of stale.docs) await d.ref.update({ status: 'cancelled', dispatchLog: FieldValue.arrayUnion('Payment not completed') });
   await retryRefunds(now);
+  await deleteExpiredKycFiles(now).catch((e) => logger.warn('KYC cleanup failed', { error: (e as Error).message }));
   const dead = await db.collection('offers').where('expiresAt', '<', now - 60_000).get();
   const batch = db.batch(); dead.docs.forEach((d) => batch.delete(d.ref)); await batch.commit();
 });
@@ -880,7 +858,7 @@ export const adminForceAssign = onCall<{ bookingId: string; partnerId?: string }
     const partners = (await db.collection('partners').get()).docs.map((d) => ({ id: d.id, d: d.data() as PartnerDoc }));
     partnerId = rank(partners, skillsFor(b.tasks), b.address.at, new Set(), 10_000)[0]?.id;
   }
-  if (!partnerId) throw new HttpsError('failed-precondition', 'No partner available.');
+  if (!partnerId) throw new HttpsError('failed-precondition', 'No expert is free within 10 km right now. Ask one to go online, or cancel and refund.');
   if (b.status === 'no_match') await bookingRef(r.data.bookingId).update({ status: 'matching' });
   await acceptInternal(r.data.bookingId, partnerId, 1);
   await log(r.data.bookingId, 'Assigned by ops');
@@ -895,36 +873,6 @@ export const adminCancelRefund = onCall<{ bookingId: string }>(async (r) => {
   if (b.paid) await refundBooking(r.data.bookingId, b, b.amountDue, 'cancelled by ops');
   await bookingRef(r.data.bookingId).update({ status: 'cancelled', cancelFee: 0, dispatchLog: FieldValue.arrayUnion('Cancelled and refunded by ops') });
   return { refunded: b.paid ? b.amountDue : 0 };
-});
-
-/** Ops links an expert's Razorpay Route account (created and KYC'd in the Razorpay dashboard), then pays out anything waiting. */
-export const adminSetPayoutAccount = onCall<{ partnerId: string; accountId: string }>(async (r) => {
-  await requireAdmin(r);
-  const accountId = String(r.data.accountId ?? '').trim();
-  if (!/^acc_[A-Za-z0-9]{6,}$/.test(accountId)) throw new HttpsError('invalid-argument', 'That is not a Razorpay account id (it starts with acc_).');
-  await db.collection('partners').doc(r.data.partnerId).update({ payout: { accountId, linkedAt: Date.now() } });
-  const waiting = await db.collection('earnings').where('partnerId', '==', r.data.partnerId).get();
-  let sent = 0;
-  for (const d of waiting.docs) {
-    const e = d.data() as Earning;
-    if (e.status === 'awaiting_account' || e.status === 'failed') { await payExpert(d.id); sent += 1; }
-  }
-  return { ok: true as const, retried: sent };
-});
-
-/** Ops looked at a complaint and the expert should be paid after all. */
-export const adminReleaseEarning = onCall<{ bookingId: string }>(async (r) => {
-  await requireAdmin(r);
-  const eref = db.collection('earnings').doc(r.data.bookingId);
-  const e = (await eref.get()).data() as Earning | undefined;
-  if (!e) throw new HttpsError('not-found', 'No payout for that booking.');
-  if (e.status === 'on_hold') {
-    for (const t of e.transfers) await setTransferHold(t.id, false);
-    await eref.update({ status: 'sent', releaseAt: Date.now(), error: FieldValue.delete(), updatedAt: Date.now() });
-  } else if (e.status === 'failed' || e.status === 'awaiting_account') {
-    await payExpert(r.data.bookingId);
-  }
-  return { ok: true as const };
 });
 
 /**
@@ -982,8 +930,15 @@ export const seedDemo = onCall<Record<string, never>>(async (r) => {
     { id: 'bot-laxmi', name: 'Laxmi Sahu', initials: 'LS', rating: 4.7, jobs: 640, skills: ['cleaning', 'kitchen', 'cooking'], hub: 'Sector 45', onShift: true, reliability: 0.93, onTime: 94, at: { lat: 28.4388, lng: 77.0602 }, bot: true },
     { id: 'bot-rekha', name: 'Rekha Kumari', initials: 'RK', rating: 4.5, jobs: 120, skills: ['cleaning'], hub: 'Sector 57', onShift: false, reliability: 0.88, onTime: 90, at: { lat: 28.461, lng: 77.089 }, bot: true },
   ];
+  // Put them around the tester's own address when it is in a live area, so every flow works wherever ops opened first.
+  const user = (await db.collection('users').doc(u).get()).data() as UserDoc | undefined;
+  const home = user?.addresses?.find((a) => a.id === (user as UserDoc & { defaultAddressId?: string }).defaultAddressId) ?? user?.addresses?.[0];
+  const base = { lat: 28.4472, lng: 77.0661 };
+  const anchor = home && (await coverageFor(home.at)).serving ? home.at : null;
+  if (anchor) seed.forEach((p) => { p.at = { lat: anchor.lat + (p.at.lat - base.lat), lng: anchor.lng + (p.at.lng - base.lng) }; });
+
   const batch = db.batch();
-  seed.forEach(({ id, ...d }) => batch.set(db.collection('partners').doc(id), { ...d, ...(razorpayMock ? { payout: { accountId: `acc_test${id.replace(/[^a-z]/g, '')}`, linkedAt: Date.now() } } : {}) }, { merge: true }));
+  seed.forEach(({ id, ...d }) => batch.set(db.collection('partners').doc(id), { ...d, verified: true }, { merge: true }));
 
   const me = (await db.collection('partners').doc(u).get()).exists;
   const shifts = me ? [

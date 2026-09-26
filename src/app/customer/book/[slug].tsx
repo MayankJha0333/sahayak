@@ -1,9 +1,12 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { Check, ChevronRight, Info, MapPin, Moon, Sun, Sunrise } from '@/components/icons';
 import { AppBar, Btn, Eyebrow, H, IconTile, Screen, SplitRow, Tiny, shadow } from '@/components/ui';
+import { NotServed } from '@/components/NotServed';
+import { useServiceArea } from '@/lib/areas';
 import { useAuth } from '@/lib/auth';
+import { slotAvailability } from '@/lib/api';
 import { takeAddTask } from '@/lib/bookingDraft';
 import { useAllPartners } from '@/lib/db';
 import { inr } from '@/lib/format';
@@ -11,7 +14,7 @@ import { distanceM, etaMinutes } from '@/lib/geo';
 import { CLOSE_HOUR, DURATIONS, HOURS_LABEL, OPEN_HOUR, SERVICES, isOpenAt, priceForMinutes, serviceBySlug, suggestMinutes } from '@/lib/mock';
 import { useTheme } from '@/theme';
 
-/** Start times on a scheduled day, grouped the way Pronto does it. Whether an expert is free is checked on the server when she books. */
+/** Start times on a scheduled day, grouped the way Pronto does it. Only the ones with a free expert nearby are shown. */
 const DAY_TIMES = [
   { h: 8, m: 0, p: 0 }, { h: 9, m: 0, p: 0 }, { h: 10, m: 0, p: 0 }, { h: 11, m: 0, p: 0 },
   { h: 12, m: 30, p: 1 }, { h: 14, m: 0, p: 1 }, { h: 15, m: 30, p: 1 },
@@ -57,22 +60,47 @@ export default function BookScreen() {
     return DAY_TIMES.map((t) => {
       const at = new Date(d); at.setHours(t.h, t.m, 0, 0);
       const past = at.getTime() < nowTick + 45 * 60_000 || t.h * 60 + t.m < OPEN_HOUR * 60 || t.h * 60 + t.m > CLOSE_HOUR * 60;
-      return { at: at.getTime(), p: t.p, full: past, label: at.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) };
+      return { at: at.getTime(), p: t.p, past, label: at.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) };
     });
   }, [days, dayIdx, nowTick, later]);
-  const visible = slots.filter((s) => s.p === period);
-
-  // Land on the first free slot of the day; if the whole day is gone, move to tomorrow.
-  useEffect(() => {
-    if (!later || !nowTick) return;
-    const free = slots.find((s) => !s.full);
-    if (!free) { if (dayIdx < days.length - 1) setDayIdx(dayIdx + 1); return; }
-    if (slotAt === undefined || (slotAt !== null && !slots.some((s) => s.at === slotAt && !s.full))) { setSlotAt(free.at); setPeriod(free.p); }
-  }, [later, nowTick, slots, slotAt, dayIdx, days.length]);
 
   const address = profile?.addresses.find((a) => a.id === profile.defaultAddressId) ?? profile?.addresses[0];
+  const { served, loading: areasLoading } = useServiceArea();
+  // This address is outside every live area: say so plainly instead of offering slots nobody can take.
+  const outside = Boolean(address) && !areasLoading && !served(address!.at);
   // Only experts who can do everything on the list count (the server matches the same way).
   const skills = [...new Set(tasks.map((t) => serviceBySlug(t).skill))];
+
+  // Ask the server which start times have a skilled expert nearby who is not booked then.
+  const open = slots.filter((x) => !x.past).map((x) => x.at);
+  const availKey = later && address && !outside && open.length ? `${address.id}|${[...tasks].sort().join(',')}|${duration}|${open.join(',')}` : '';
+  const [avail, setAvail] = useState<{ key: string; free: Set<number>; experts: number; err?: string } | null>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!availKey || !address) return;
+    let live = true;
+    slotAvailability({ tasks, addressId: address.id, durationMin: duration, times: open })
+      .then((r) => { if (live) setAvail({ key: availKey, free: new Set(r.free), experts: r.experts }); })
+      .catch((e) => { if (live) setAvail({ key: availKey, free: new Set(), experts: 0, err: (e as Error).message }); });
+    return () => { live = false; };
+  }, [availKey, retry]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ready = Boolean(availKey) && avail?.key === availKey;
+  const checking = Boolean(availKey) && !ready;
+  const bookable = slots.filter((x) => !x.past && ready && avail!.free.has(x.at));
+  const visible = bookable.filter((x) => x.p === period);
+
+  // Today has no start times left: move to tomorrow. Otherwise land on the first free slot of the day.
+  useEffect(() => {
+    if (!later || !nowTick) return;
+    if (!slots.some((x) => !x.past)) { if (dayIdx < days.length - 1) setDayIdx(dayIdx + 1); return; }
+    if (!ready) return;
+    const first = bookable[0];
+    if (!first) { if (slotAt !== null) setSlotAt(null); return; }
+    if (slotAt === undefined || slotAt === null || !bookable.some((x) => x.at === slotAt)) {
+      const inPeriod = bookable.find((x) => x.p === period);
+      setSlotAt((inPeriod ?? first).at); if (!inPeriod) setPeriod(first.p);
+    }
+  }, [later, nowTick, slots, slotAt, dayIdx, days.length, ready, bookable, period]);
   const nearby = address ? partners.filter((p) => p.onShift && skills.every((sk) => p.skills.includes(sk)) && distanceM(p.at, address.at) < 3000) : [];
   const eta = nearby.length && address ? Math.max(4, Math.min(...nearby.map((p) => etaMinutes(distanceM(p.at, address.at))))) : null;
 
@@ -95,9 +123,11 @@ export default function BookScreen() {
     });
   }, [touchedDuration]));
   const price = priceForMinutes(duration);
-  const chosen = slots.find((s) => s.at === slotAt);
-  const canContinue = tasks.length > 0 && (!later || Boolean(chosen && !chosen.full));
+  const chosen = bookable.find((s) => s.at === slotAt);
+  const canContinue = tasks.length > 0 && (!later || Boolean(chosen));
   const whenLabel = later && chosen ? `${dayIdx === 0 ? 'Today' : dayIdx === 1 ? 'Tomorrow' : DAY[days[dayIdx].getDay()]} ${chosen.label}` : null;
+
+  if (outside) return <Redirect href="/customer/coming-soon" />;
 
   return (
     <View className="flex-1 bg-ground dark:bg-ground-dark">
@@ -127,6 +157,8 @@ export default function BookScreen() {
             <SplitRow label={`${duration} min · ${tasks.length} task${tasks.length > 1 ? 's' : ''}${whenLabel ? ` · ${whenLabel}` : ''}`} value={inr(price)} strong />
             {!address ? (
               <Btn title="Add your address to continue" onPress={() => router.push('/customer/address')} />
+            ) : outside ? (
+              <Btn title="Not available here yet — change address" tone="secondary" onPress={() => router.push('/customer/address')} />
             ) : !later && !eta ? (
               <Btn title="No one online now — pick a slot" onPress={() => { setDayIdx(0); setSlotAt(undefined); }} />
             ) : (
@@ -153,6 +185,8 @@ export default function BookScreen() {
             <Text className="font-jkm flex-1 text-[14.5px] leading-[21px] text-ink dark:text-ink-dark">Drop a pin on your home so we can find the nearest expert.</Text>
             <Text className="font-jkb text-[13px] text-brand dark:text-brand-dark">Add</Text>
           </Pressable>
+        ) : outside ? (
+          <NotServed at={address.at} line={`${address.line1}, ${address.line2}`} city={address.line2.split(',').pop()?.trim()} />
         ) : !later ? (
           <View className="flex-row items-start gap-3 rounded-2xl bg-lavender px-4 py-3.5">
             <Info size={18} color={c.ink} style={{ marginTop: 2 }} />
@@ -186,7 +220,7 @@ export default function BookScreen() {
                 {PERIODS.map(({ label, Icon }, i) => {
                   const on = period === i;
                   return (
-                    <Pressable key={label} accessibilityRole="button" onPress={() => { setPeriod(i); setSlotAt(slots.find((x) => x.p === i && !x.full)?.at ?? null); }}
+                    <Pressable key={label} accessibilityRole="button" onPress={() => { setPeriod(i); setSlotAt(bookable.find((x) => x.p === i)?.at ?? null); }}
                       className={`flex-1 flex-row items-center justify-center gap-2 rounded-full py-3 ${on ? 'bg-brand' : ''}`}>
                       <Icon size={16} color={on ? c.onBrand : c.ink2} />
                       <Text className={`text-[14.5px] ${on ? 'font-jkb text-onbrand' : 'font-jkm text-ink2 dark:text-ink2-dark'}`}>{label}</Text>
@@ -194,13 +228,24 @@ export default function BookScreen() {
                   );
                 })}
               </View>
-              {visible.some((s) => !s.full) ? (
+              {checking ? (
+                <View className="flex-row items-center justify-center gap-2 py-5">
+                  <ActivityIndicator size="small" color={c.brand} />
+                  <Tiny>Checking which experts are free…</Tiny>
+                </View>
+              ) : avail?.err ? (
+                <View className="items-center gap-2 py-4">
+                  <H>Could not check free slots</H>
+                  <Tiny>{avail.err}</Tiny>
+                  <Btn title="Try again" size="sm" tone="secondary" onPress={() => setRetry((n) => n + 1)} />
+                </View>
+              ) : visible.length ? (
                 <View className="flex-row flex-wrap gap-2">
                   {visible.map((s) => {
                     const on = s.at === slotAt;
                     return (
-                      <Pressable key={s.at} accessibilityRole="button" disabled={s.full} onPress={() => setSlotAt(s.at)}
-                        className={`rounded-2xl border px-5 py-3.5 ${on ? 'border-brand bg-brand-soft dark:border-brand-dark dark:bg-brand-softdark' : 'border-line bg-paper dark:border-line-dark dark:bg-paper-dark'} ${s.full ? 'opacity-35' : ''}`}>
+                      <Pressable key={s.at} accessibilityRole="button" onPress={() => setSlotAt(s.at)}
+                        className={`rounded-2xl border px-5 py-3.5 ${on ? 'border-brand bg-brand-soft dark:border-brand-dark dark:bg-brand-softdark' : 'border-line bg-paper dark:border-line-dark dark:bg-paper-dark'}`}>
                         <Text className={`text-[15px] ${on ? 'font-jkb text-ink dark:text-ink-dark' : 'font-jkm text-ink dark:text-ink-dark'}`}>{s.label}</Text>
                       </Pressable>
                     );
@@ -208,8 +253,8 @@ export default function BookScreen() {
                 </View>
               ) : (
                 <View className="items-center gap-1 py-4">
-                  <H>No slots in the {PERIODS[period].label.toLowerCase()}</H>
-                  <Tiny>Try another time of day, or the next day.</Tiny>
+                  <H>{ready && avail!.experts === 0 ? 'No expert near you yet' : bookable.length ? `No expert free in the ${PERIODS[period].label.toLowerCase()}` : 'No expert is free on this day'}</H>
+                  <Tiny>{ready && avail!.experts === 0 ? 'We have no expert near this address for this list yet. Try fewer tasks, or check again soon.' : bookable.length ? 'Try another time of day.' : 'Every expert near you is booked. Try the next day.'}</Tiny>
                 </View>
               )}
             </>
