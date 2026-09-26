@@ -1,0 +1,28 @@
+# New Play Store version.
+# `npm run release` bumps the version and pushes a tag (v1.0.1). That starts this workflow:
+#   1. EAS builds the signed app bundle (about 15–25 min)
+#   2. EAS uploads it to Play Console → Internal testing, as a DRAFT release
+# Then you open Play Console, check it and press "Review release" → "Start rollout".
+# You can also run it by hand from expo.dev → project → Workflows.
+name: Release to Play Store
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+jobs:
+  build_android:
+    name: Build Android app bundle
+    type: build
+    params:
+      platform: android
+      profile: production
+
+  submit_android:
+    name: Upload to Play Console (internal, draft)
+    type: submit
+    needs: [build_android]
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
+      profile: internal

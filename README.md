@@ -247,6 +247,8 @@ and `functions/src/catalog.ts` (what the server charges — the one that counts)
 
 ## 🌐 Go live
 
+**Releasing to the Play Store** (CI/CD with EAS Workflows, over-the-air updates, versioning): see [`docs/RELEASING.md`](docs/RELEASING.md).
+
 <details>
 <summary><b>Firebase</b></summary>
 

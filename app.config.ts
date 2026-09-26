@@ -1,5 +1,5 @@
-import { existsSync } from 'fs';
-import type { ExpoConfig } from 'expo/config';
+import { existsSync, readFileSync } from 'fs';
+import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /**
  * Google Maps needs a key on Android. Put it in .env as
@@ -9,13 +9,23 @@ import type { ExpoConfig } from 'expo/config';
 const googleMapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
 
 // Downloaded from Firebase → Project settings → Your apps. Builds skip them when absent.
-const androidServices = existsSync('./google-services.json') ? './google-services.json' : undefined;
-const iosServices = existsSync('./GoogleService-Info.plist') ? './GoogleService-Info.plist' : undefined;
+// On EAS (cloud) builds the files come from EAS file variables GOOGLE_SERVICES_JSON / GOOGLE_SERVICE_INFO_PLIST,
+// because they are git-ignored and never uploaded (see scripts/eas-env.mjs).
+const androidServices = process.env.GOOGLE_SERVICES_JSON ?? (existsSync('./google-services.json') ? './google-services.json' : undefined);
+const iosServices = process.env.GOOGLE_SERVICE_INFO_PLIST ?? (existsSync('./GoogleService-Info.plist') ? './GoogleService-Info.plist' : undefined);
 
-const config: ExpoConfig = {
+/** The app version shown in the Play Store ("1.0.3"). `npm run release` bumps it in package.json. */
+const { version } = JSON.parse(readFileSync('./package.json', 'utf8')) as { version: string };
+
+/**
+ * `config` is what `eas init` / `eas update:configure` wrote into app.json (the EAS project id, owner and
+ * update URL). Everything else is set here.
+ */
+export default ({ config }: ConfigContext): ExpoConfig => ({
+  ...config,
   name: 'Sahayak',
   slug: 'sahayak',
-  version: '1.0.0',
+  version,
   orientation: 'portrait',
   scheme: 'sahayak',
   userInterfaceStyle: 'automatic',
@@ -81,17 +91,20 @@ const config: ExpoConfig = {
 
   experiments: { typedRoutes: true, reactCompiler: true },
 
-  // `eas init` writes the projectId here on first run.
+  // `eas init` writes the project id into app.json; EAS_PROJECT_ID can override it.
   extra: {
-    eas: { projectId: process.env.EAS_PROJECT_ID },
+    ...config.extra,
     router: {},
+    eas: { ...config.extra?.eas, projectId: process.env.EAS_PROJECT_ID ?? config.extra?.eas?.projectId },
   },
 
   updates: {
-    // `eas update:configure` fills in the URL.
+    ...config.updates,
     fallbackToCacheTimeout: 0,
+    // Where phones fetch over-the-air updates. `eas update:configure` also writes this into app.json.
+    ...(config.extra?.eas?.projectId ? { url: `https://u.expo.dev/${config.extra.eas.projectId}` } : {}),
   },
+  // An update only reaches builds with the same app version, so a JS update can never land on an app
+  // whose native code is different.
   runtimeVersion: { policy: 'appVersion' },
-};
-
-export default config;
+});

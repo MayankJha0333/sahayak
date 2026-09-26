@@ -1,0 +1,17 @@
+# Over-the-air update for everyone on the Play Store app.
+# Run it by hand when a fix is ready: expo.dev → project → Workflows → "App update → production" → Run,
+# or from the terminal:  npx eas-cli@latest workflow:run .eas/workflows/app-update-production.yml
+name: App update → production
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    name: Publish to production
+    type: update
+    environment: production
+    params:
+      channel: production
+      platform: android
+      environment: production

@@ -1,0 +1,22 @@
+# Runs on every pull request to main and every push to main.
+# Checks the code still compiles: the app, the Cloud Functions and the ops website.
+name: Checks
+
+on:
+  pull_request:
+    branches: ['main']
+  push:
+    branches: ['main']
+
+jobs:
+  checks:
+    name: Typecheck app, build functions and ops website
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: App typecheck
+        run: npm run typecheck
+      - name: Cloud Functions build
+        run: npm ci --prefix functions && npm --prefix functions run build
+      - name: Ops website build
+        run: npm ci --prefix admin-web && npm --prefix admin-web run build

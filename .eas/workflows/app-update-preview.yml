@@ -1,0 +1,24 @@
+# Over-the-air update for testers.
+# Every push to main that touches the app is published to the "preview" channel in a few minutes —
+# screens, text and logic (JavaScript) only. Native changes need a new store build (release-android.yml).
+name: App update → preview
+
+on:
+  push:
+    branches: ['main']
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'app.config.ts'
+      - 'app.json'
+      - 'package.json'
+
+jobs:
+  update:
+    name: Publish to preview
+    type: update
+    environment: preview
+    params:
+      channel: preview
+      platform: android
+      environment: preview

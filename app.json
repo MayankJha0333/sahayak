@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "25656a92-e11f-41a3-9f69-99216cba1619"
+      }
+    },
+    "owner": "luffylab"
+  }
+}
