@@ -17,6 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SetupScreen } from '@/components/SetupScreen';
 import { AuthProvider } from '@/lib/auth';
 import { firebaseConfigured } from '@/lib/firebase';
+import { NotificationBridge } from '@/lib/notifications';
 import { useReferralCapture } from '@/lib/referral';
 import { ThemeProvider } from '@/theme';
 
@@ -48,6 +49,7 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         {firebaseConfigured ? (
           <AuthProvider>
+            <NotificationBridge />
             <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
           </AuthProvider>
         ) : (

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Art } from '@/components/Art';
+import { BellButton } from '@/components/BellButton';
 import { BrandPanel } from '@/components/BrandPanel';
 import { useWaitlistJoin } from '@/components/NotServed';
 import { Check, ChevronLeft, Clock, MapPin, Share2, ShieldCheck, Users, Zap } from '@/components/icons';
@@ -97,10 +98,13 @@ export function ComingSoonView({ addressId, tab }: { addressId?: string; tab?: b
         {/* Hero */}
         <BrandPanel style={{ paddingTop: insets.top + 10, paddingHorizontal: 20, paddingBottom: 30, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}>
           {tab ? (
-            <Pressable accessibilityRole="button" onPress={() => router.push('/customer/(tabs)/account')} className="flex-row items-center gap-1.5 self-start">
-              <MapPin size={16} color="#FFFFFF" />
-              <Text className="font-jkb text-[15px] text-white" numberOfLines={1}>{address.label} · {locality}</Text>
-            </Pressable>
+            <View className="flex-row items-center gap-3">
+              <Pressable accessibilityRole="button" onPress={() => router.push('/customer/(tabs)/account')} className="flex-1 flex-row items-center gap-1.5">
+                <MapPin size={16} color="#FFFFFF" />
+                <Text className="flex-shrink font-jkb text-[15px] text-white" numberOfLines={1}>{address.label} · {locality}</Text>
+              </Pressable>
+              <BellButton tone="glass" size={40} />
+            </View>
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/customer'))}
               className="h-10 w-10 items-center justify-center rounded-full bg-white/15">

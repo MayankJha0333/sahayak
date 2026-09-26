@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BellButton } from '@/components/BellButton';
 import { BrandPanel } from '@/components/BrandPanel';
 import { ChevronRight } from '@/components/icons';
 import { SearchMap } from '@/components/SearchMap';
@@ -66,6 +67,7 @@ export default function PartnerJobs() {
             <Eyebrow>{partner.hub} hub</Eyebrow>
             <Text className="font-jkb text-[17px] text-white">{partner.name}</Text>
           </View>
+          <BellButton tone="glass" size={44} />
         </View>
 
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: partner.onShift }} onPress={() => toggle(!partner.onShift)} disabled={toggling}

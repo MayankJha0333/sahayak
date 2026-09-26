@@ -46,3 +46,9 @@ export type Coupon = {
 export type Waitlist = { userId: string; name: string; phone: string; at: LatLng; line: string; city: string; status: 'waiting' | 'notified'; createdAt: number };
 export type Referral = { referrerId: string; refereeId?: string; side: string; name: string; phone: string; status: string; invitedAt: number; joinedAt?: number; reward: number; paid?: number };
 export type ReferralConfig = { active: boolean; customerReward: number; signupReward?: number; partnerReward: number };
+
+/** A message ops sent from the Notifications page (written by the sendBroadcast function). */
+export type Broadcast = {
+  title: string; body: string; audience: 'all' | 'customers' | 'experts'; open?: string;
+  sentBy: string; createdAt: number; sentAt?: number; status: 'sending' | 'sent'; recipients: number; pushed?: number;
+};

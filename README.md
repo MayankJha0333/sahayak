@@ -143,6 +143,13 @@ Vite app in `admin-web/`. Prices, dispatch, payment checks and refunds all run o
 - Razorpay checkout; the server verifies the signature and the amount before a booking counts as paid.
 - Automatic refunds when no expert is found or the customer cancels in time.
 
+**Notifications**
+- Customers hear about every step: booking confirmed, expert on the way, arrived, visit started, done (rate her), cancelled / refunded, no expert free.
+- Experts get a loud "New job" alert for every offer, plus scheduled bookings, jobs assigned by ops, cancellations, pay, and the result of their Aadhaar check.
+- Ops can send one message to everyone, only customers or only experts from the website (**Notifications** page), with ready-made templates, a lock-screen preview and a history of what was sent.
+- Every notice also lands under the 🔔 bell in the app (with an unread count), so nothing is lost when push is off. Tapping one opens the right screen.
+- Push goes through Expo's push service to every phone the person signed in on. On the simulator and in Expo Go on Android (no remote push there) the app shows the same banner itself while it is open.
+
 ---
 
 ## 🚀 Run it on your computer
@@ -254,6 +261,18 @@ and `functions/src/catalog.ts` (what the server charges — the one that counts)
 </details>
 
 <details>
+<summary><b>Push notifications</b></summary>
+
+1. Run `eas init` once — it writes the EAS project id the app needs to get a push address.
+2. Build the app with EAS (`npm run build:dev:android` / `build:dev:ios`). Android needs a build for remote push; Expo Go on iPhone works for testing.
+3. Android: add your Firebase `google-services.json` and upload its FCM key to Expo (`eas credentials`). iOS: EAS sets up the push key for you.
+4. Optional: if you turn on "enhanced push security" in your Expo account, put the access token in `functions/.env` as `EXPO_ACCESS_TOKEN`.
+
+The server sends everything from `functions/src/notify.ts`. No other setup is needed on the emulators.
+
+</details>
+
+<details>
 <summary><b>Razorpay</b></summary>
 
 1. Sign up at razorpay.com and stay in **Test mode** → Settings → API Keys → generate a test key.
@@ -282,6 +301,7 @@ Razorpay key id; the secret stays in `functions/.env` on the server.
 src/app/                 screens (expo-router: one file = one route)
   index.tsx              launcher — customer, expert or ops
   login.tsx              phone + OTP, name, referral code
+  notifications.tsx      the bell: every notice for customers and experts
   customer/              (tabs) home · bookings · account
                          address · book · review · coupons · matching · track · rate
                          payments · refer · coming-soon
@@ -295,6 +315,7 @@ functions/src/           Cloud Functions
   growth.ts              service areas, waitlist, coupons, referrals, customer credit
   kyc.ts · wallet.ts     expert sign-up and Aadhaar checks · earnings and payouts
   razorpay.ts            orders, refunds, webhooks, RazorpayX
+  notify.ts              notifications: inbox, Expo push, booking/offer notices, ops broadcasts
   catalog.ts             prices — the server's copy is the one that counts
 admin-web/               ops website (Vite + React + Leaflet) → Firebase Hosting
 firestore.rules          who can read and write what

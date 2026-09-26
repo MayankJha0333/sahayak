@@ -12,6 +12,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { SERVICES } from './catalog';
 import { isServing } from './areaGeo';
 import { loadAreas } from './growth';
+import { notify } from './notify';
 import { db, must, onEmulator, requireAdmin, uid, type Kyc, type PartnerDoc } from './shared';
 
 export const KYC_FILE_KINDS = ['aadhaarFront', 'aadhaarBack', 'selfie'] as const;
@@ -130,6 +131,9 @@ export const adminReviewKyc = onCall<{ partnerId: string; decision: 'approve' | 
     });
   }
   await db.collection('auditLog').add({ at: now, by: admin, action: `kyc_${r.data.decision}`, partnerId: r.data.partnerId, reason: r.data.reason ?? '' });
+  await notify([r.data.partnerId], r.data.decision === 'approve'
+    ? { kind: 'account', link: '/partner', title: 'You are verified!', body: 'Your Aadhaar check is done. Go online to start getting jobs near you.' }
+    : { kind: 'account', link: '/partner/verify', title: 'Please fix your documents', body: String(r.data.reason ?? '').trim().slice(0, 180) });
   return { ok: true as const };
 });
 

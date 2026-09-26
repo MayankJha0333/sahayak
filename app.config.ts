@@ -69,6 +69,7 @@ const config: ExpoConfig = {
       },
     ],
     'expo-maps',
+    ['expo-notifications', { color: '#EE5A40', defaultChannel: 'default' }],
     [
       'expo-image-picker',
       {

@@ -16,10 +16,12 @@ import {
 import { countCouponUse, coverageFor, evaluateCoupon, referralConfig } from './growth';
 import { deleteExpiredKycFiles } from './kyc';
 import { creditEarning, holdEarning } from './wallet';
+import { bookingNotices, offerNotices } from './notify';
 
 export * from './growth';
 export * from './kyc';
 export * from './wallet';
+export * from './notify';
 
 
 /* ================================================================== */
@@ -382,6 +384,9 @@ export const onBookingWritten = onDocumentWritten({ document: 'bookings/{id}', t
   if (!after) return;
   const id = ev.params.id;
 
+  // Tell the customer and the expert first: dispatch below can run for a minute or more.
+  if (before?.status !== after.status) await bookingNotices(id, before, after).catch((e) => logger.warn('booking notices failed', e));
+
   if (after.status === 'matching' && before?.status !== 'matching') await runDispatch(id);
   if (after.status === 'assigned' && before?.status !== 'assigned' && after.partnerId) await maybeSimulateRide(id);
   if (after.status === 'in_progress' && before?.status !== 'in_progress' && after.partnerId) await maybeSimulateWork(id);
@@ -417,6 +422,7 @@ async function runDispatch(id: string) {
     targets.forEach((t) => batch.set(db.collection('offers').doc(offerId(id, t.id)),
       { bookingId: id, partnerId: t.id, stage, expiresAt, createdAt: Date.now() }));
     await batch.commit();
+    await offerNotices(id, b, targets).catch((e) => logger.warn('offer notices failed', e));
     await log(id, stage === 1
       ? `Sent to ${targets[0].d.name} — nearest on shift, ${(targets[0].dist / 1000).toFixed(1)} km`
       : `Sent to ${targets.length} expert${targets.length > 1 ? 's' : ''} within ${radius / 1000} km — first to accept wins`);
@@ -853,8 +859,9 @@ export const adminForceAssign = onCall<{ bookingId: string; partnerId?: string }
   }
   if (!partnerId) throw new HttpsError('failed-precondition', 'No expert is free within 10 km right now. Ask one to go online, or cancel and refund.');
   if (b.status === 'no_match') await bookingRef(r.data.bookingId).update({ status: 'matching' });
-  await acceptInternal(r.data.bookingId, partnerId, 1);
+  // Logged first, so the expert's "you have a job" notice knows ops picked her.
   await log(r.data.bookingId, 'Assigned by ops');
+  await acceptInternal(r.data.bookingId, partnerId, 1);
   return { ok: true as const };
 });
 

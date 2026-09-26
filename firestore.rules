@@ -111,6 +111,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The bell in the app. Written by Cloud Functions; she can only mark her own notices as read.
+    match /notifications/{uid}/items/{id} {
+      allow read: if isMe(uid);
+      allow update: if isMe(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+    // Phone push addresses. Only the savePushToken / removePushToken functions touch these.
+    match /pushTokens/{uid} { allow read, write: if false; }
+    // Messages ops sent to everyone. Sent through the sendBroadcast function.
+    match /broadcasts/{id} { allow read: if isAdmin(); allow write: if false; }
+
     match /refundQueue/{id} { allow read: if isAdmin(); allow write: if false; }
     match /auditLog/{id} { allow read: if isAdmin(); allow write: if false; }
     match /creditLog/{id} { allow read: if isAdmin(); allow write: if false; }

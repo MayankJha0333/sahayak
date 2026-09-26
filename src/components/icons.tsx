@@ -66,6 +66,8 @@ export const Lock = feather('lock');
 export const Camera = feather('camera');
 export const ImageIcon = feather('image');
 export const Upload = feather('upload');
+export const Bell = feather('bell');
+export const BellOff = feather('bell-off');
 
 export function IndianRupee({ size = 20, color = light.ink2, style }: IconProps) {
   return <MaterialIcons name="currency-rupee" size={size} color={color} style={style} />;

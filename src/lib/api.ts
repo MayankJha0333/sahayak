@@ -17,6 +17,14 @@ export const verifyPayment = call<{ bookingId: string; paymentId: string; orderI
 export const createBalanceOrder = call<{ bookingId: string; tip: number }, OrderResult>('createBalanceOrder');
 export const verifyBalancePayment = call<{ bookingId: string; paymentId: string; orderId: string; signature: string }, { ok: true }>('verifyBalancePayment');
 
+/* ---------- notifications ---------- */
+
+/** Links this phone's Expo push address to the signed-in account (and unlinks it from anyone else). */
+export const savePushToken = call<{ token: string; platform?: string }, { ok: true }>('savePushToken');
+export const removePushToken = call<{ token: string }, { ok: true }>('removePushToken');
+export type Audience = 'all' | 'customers' | 'experts';
+export const sendBroadcast = call<{ title: string; body: string; audience: Audience; open?: string }, { recipients: number; pushed: number }>('sendBroadcast');
+
 /* ---------- booking lifecycle ---------- */
 
 export const cancelBooking = call<{ bookingId: string; expectFee?: number }, { refunded: number; fee: number }>('cancelBooking');

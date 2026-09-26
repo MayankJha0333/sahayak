@@ -11,6 +11,7 @@ import Bookings from './pages/Bookings';
 import Coupons from './pages/Coupons';
 import Customers from './pages/Customers';
 import Experts from './pages/Experts';
+import Notifications from './pages/Notifications';
 import Overview from './pages/Overview';
 import Payouts from './pages/Payouts';
 import Referrals from './pages/Referrals';
@@ -28,6 +29,7 @@ const PAGES = {
   coupons: { label: 'Coupons', C: Coupons, icon: 'coupons', group: 'Grow' },
   referrals: { label: 'Referrals', C: Referrals, icon: 'referrals', group: 'Grow' },
   customers: { label: 'Customers', C: Customers, icon: 'customers', group: 'Grow' },
+  notifications: { label: 'Notifications', C: Notifications, icon: 'bell', group: 'Grow' },
 } as const satisfies Record<string, { label: string; icon: IconName; group: string; C: unknown }>;
 type PageKey = keyof typeof PAGES;
 

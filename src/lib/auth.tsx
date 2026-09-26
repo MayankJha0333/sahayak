@@ -3,6 +3,7 @@ import {
   auth, signInEmail, signInGoogle, signOutAll, signUpEmail, startPhone, watchAuth, type AuthUser, type PhoneVerifier,
 } from './fb/auth';
 import { doc, db, getDoc, onSnapshot, setDoc } from './fb/firestore';
+import { unregisterPush } from './push';
 import type { PartnerDoc, Role, UserDoc } from './types';
 
 export type PhoneConfirmation = { confirm: (code: string) => Promise<void> };
@@ -109,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
 
-    signOut: async () => { await signOutAll(); },
+    signOut: async () => { await unregisterPush(); await signOutAll(); },
   }), [ready, user, profile, partner, isAdmin, adminKnown]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

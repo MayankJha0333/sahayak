@@ -182,4 +182,12 @@ export type ReferralDoc = {
 
 export type FeedbackDoc = { userId: string; kind: 'feedback' | 'request' | 'problem'; text: string; bookingId?: string; at: number; /** Written by the server for a rating of 2★ or less. */ auto?: boolean };
 
+/** One row under the bell: notifications/{uid}/items/{id}. Written by the server; the app only marks it read. */
+export type NoticeDoc = {
+  title: string; body: string; kind: 'booking' | 'job' | 'offer' | 'account' | 'promo';
+  /** Screen to open on tap, e.g. /customer/track/abc. */
+  link?: string; bookingId?: string; broadcastId?: string;
+  read: boolean; createdAt: number;
+};
+
 export type WithId<T> = T & { id: string };

@@ -6,6 +6,7 @@ import { Art, type ArtName } from '@/components/Art';
 import { BrandPanel } from '@/components/BrandPanel';
 import { ComingSoonView } from '@/components/ComingSoon';
 import { NotServed } from '@/components/NotServed';
+import { BellButton } from '@/components/BellButton';
 import { ChevronDown, ChevronRight, Plus, User } from '@/components/icons';
 import { Badge, Btn, Card, H, Progress, Tiny, shadow } from '@/components/ui';
 import { seedDemo } from '@/lib/api';
@@ -64,10 +65,13 @@ export default function CustomerHome() {
             </View>
             <Text className="font-jkm text-[15px] text-white/90" numberOfLines={1}>{address ? [address.line1, address.line2].filter(Boolean).join(', ') : 'Tap to set your address on the map'}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Account" onPress={() => router.push('/customer/(tabs)/account')}
-            className="h-14 w-14 items-center justify-center rounded-full bg-white">
-            <User size={26} color={c.ink} />
-          </Pressable>
+          <View className="flex-row items-center gap-2">
+            <BellButton size={52} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Account" onPress={() => router.push('/customer/(tabs)/account')}
+              className="h-[52px] w-[52px] items-center justify-center rounded-full bg-white">
+              <User size={24} color={c.ink} />
+            </Pressable>
+          </View>
         </View>
 
         <View className="mt-8 flex-row items-center">
